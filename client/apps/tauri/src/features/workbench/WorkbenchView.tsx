@@ -1078,58 +1078,34 @@ export function WorkbenchView({
               }
             />
           </CardTitle>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <SummaryGenerateDialog
-                open={isSummaryGenerateDialogOpen}
-                templateId={summaryTemplateId}
-                lengthMode={summaryLengthMode}
-                languageCode={summaryLanguage.code}
-                isGenerating={isSummarizing}
-                disabled={renderedTranscript.length === 0}
-                onOpenChange={setIsSummaryGenerateDialogOpen}
-                onTemplateChange={setSummaryTemplateId}
-                onLengthChange={setSummaryLengthMode}
-                onLanguageChange={setSummaryLanguage}
-                onGenerate={generateSummary}
-              />
-              <PodcastGenerateDialog
-                open={isPodcastGenerateDialogOpen}
-                podcastHistoryCount={podcastHistory.length}
-                settings={podcastSettings}
-                sourceKind={podcastSourceKind}
-                canGenerate={Boolean(onGeneratePodcast && video)}
-                hasSummary={Boolean(activeSummary)}
-                hasTranscript={transcript.length > 0}
-                isGenerating={isGeneratingPodcast}
-                onOpenChange={setIsPodcastGenerateDialogOpen}
-                onSettingsChange={setPodcastSettings}
-                onSourceKindChange={setPodcastSourceKind}
-                onGenerate={submitPodcastGeneration}
-              />
-            </div>
-            {activeSummary ? (
-              <TooltipProvider delayDuration={150}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="h-10 w-10"
-                      disabled={isSummarizing}
-                      aria-label={t("workbench.summary.save")}
-                      onClick={() => onSaveMarkdown(activeSummary.id)}
-                    >
-                      <Download className="h-4 w-4" aria-hidden="true" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    {t("workbench.summary.save")}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            <SummaryGenerateDialog
+              open={isSummaryGenerateDialogOpen}
+              templateId={summaryTemplateId}
+              lengthMode={summaryLengthMode}
+              languageCode={summaryLanguage.code}
+              isGenerating={isSummarizing}
+              disabled={renderedTranscript.length === 0}
+              onOpenChange={setIsSummaryGenerateDialogOpen}
+              onTemplateChange={setSummaryTemplateId}
+              onLengthChange={setSummaryLengthMode}
+              onLanguageChange={setSummaryLanguage}
+              onGenerate={generateSummary}
+            />
+            <PodcastGenerateDialog
+              open={isPodcastGenerateDialogOpen}
+              podcastHistoryCount={podcastHistory.length}
+              settings={podcastSettings}
+              sourceKind={podcastSourceKind}
+              canGenerate={Boolean(onGeneratePodcast && video)}
+              hasSummary={Boolean(activeSummary)}
+              hasTranscript={transcript.length > 0}
+              isGenerating={isGeneratingPodcast}
+              onOpenChange={setIsPodcastGenerateDialogOpen}
+              onSettingsChange={setPodcastSettings}
+              onSourceKindChange={setPodcastSourceKind}
+              onGenerate={submitPodcastGeneration}
+            />
           </div>
         </CardHeader>
         <CardContent className="flex min-h-0 flex-1 flex-col gap-3">
@@ -1171,6 +1147,13 @@ export function WorkbenchView({
                 editable={Boolean(activeSummary && onUpdateSummaryMarkdown)}
                 ariaLabel={t("workbench.summary.editor")}
                 onCommitMarkdown={onUpdateSummaryMarkdown}
+                saveLabel={t("workbench.summary.save")}
+                saveDisabled={isSummarizing}
+                onSaveMarkdown={
+                  activeSummary
+                    ? () => onSaveMarkdown(activeSummary.id)
+                    : undefined
+                }
               />
             ) : (
               <p className="text-sm text-muted-foreground">
@@ -1854,12 +1837,18 @@ function SummaryMarkdownPanel({
   editable,
   ariaLabel,
   onCommitMarkdown,
+  saveLabel,
+  saveDisabled = false,
+  onSaveMarkdown,
 }: {
   summaryId?: string;
   markdown: string;
   editable: boolean;
   ariaLabel: string;
   onCommitMarkdown?(summaryId: string, markdown: string): void;
+  saveLabel: string;
+  saveDisabled?: boolean;
+  onSaveMarkdown?(): void;
 }) {
   const [draftMarkdown, setDraftMarkdown] = useState(markdown);
   const debouncedDraftMarkdown = useDebouncedValue(draftMarkdown, 250);
@@ -1917,6 +1906,29 @@ function SummaryMarkdownPanel({
         markdown={draftMarkdown}
         editable={editable}
         ariaLabel={ariaLabel}
+        toolbarActions={
+          onSaveMarkdown ? (
+            <TooltipProvider delayDuration={150}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    disabled={saveDisabled}
+                    aria-label={saveLabel}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={onSaveMarkdown}
+                  >
+                    <Download className="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">{saveLabel}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : undefined
+        }
         onMarkdownChange={setDraftMarkdown}
       />
     </div>

@@ -47,11 +47,10 @@ import {
   ttsEngineForModel,
 } from "@/services/ttsSettingsService";
 import {
+  BookOpen,
   Bot,
-  CircleHelp,
   Download,
   GraduationCap,
-  HelpCircle,
   Keyboard,
   MonitorCog,
   Palette,
@@ -151,7 +150,7 @@ const settingsTabs = [
     id: "help",
     title: "help.menu",
     description: "settings.tabs.helpDescription",
-    icon: CircleHelp,
+    icon: BookOpen,
   },
 ] satisfies Array<{
   id: SettingsTabId;
@@ -1285,7 +1284,7 @@ function HelpSettingsPanel({
             disabled={!onOpenFaq}
             onClick={onOpenFaq}
           >
-            <HelpCircle className="h-4 w-4" aria-hidden="true" />
+            <BookOpen className="h-4 w-4" aria-hidden="true" />
             {t("help.faq")}
           </Button>
         </CardContent>

@@ -396,8 +396,12 @@ describe("WorkbenchView", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Undo" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Redo" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Heading 1" }))
+      .toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Bold" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Bullet list" }))
+      .toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save markdown" }))
       .toBeInTheDocument();
   });
 

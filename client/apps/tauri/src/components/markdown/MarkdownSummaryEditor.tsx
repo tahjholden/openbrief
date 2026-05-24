@@ -23,6 +23,7 @@ type MarkdownSummaryEditorProps = {
   editable?: boolean;
   ariaLabel: string;
   className?: string;
+  toolbarActions?: ReactNode;
   onMarkdownChange?(markdown: string): void;
 };
 
@@ -33,6 +34,7 @@ export function MarkdownSummaryEditor({
   editable = false,
   ariaLabel,
   className,
+  toolbarActions,
   onMarkdownChange,
 }: MarkdownSummaryEditorProps) {
   const markdownRef = useRef(markdown);
@@ -84,7 +86,13 @@ export function MarkdownSummaryEditor({
         className,
       )}
     >
-      {editable ? <MarkdownEditorToolbar editor={editor} /> : null}
+      {editable || toolbarActions ? (
+        <MarkdownEditorToolbar
+          editor={editor}
+          editable={editable}
+          actions={toolbarActions}
+        />
+      ) : null}
       <div className={cn("min-h-0 flex-1 px-3", editable && "pt-3")}>
         <EditorContent editor={editor} />
       </div>
@@ -92,92 +100,110 @@ export function MarkdownSummaryEditor({
   );
 }
 
-function MarkdownEditorToolbar({ editor }: { editor: Editor | null }) {
+function MarkdownEditorToolbar({
+  editor,
+  editable,
+  actions,
+}: {
+  editor: Editor | null;
+  editable: boolean;
+  actions?: ReactNode;
+}) {
   return (
     <div
       className="sticky top-0 z-10 flex flex-wrap items-center gap-1 rounded-t-md border-b border-border bg-muted px-2 py-1.5"
       aria-label="Markdown formatting toolbar"
     >
-      <ToolbarButton
-        label="Undo"
-        disabled={!editor?.can().chain().focus().undo().run()}
-        onCommand={() => editor?.chain().focus().undo().run()}
-      >
-        <Undo2 className="h-4 w-4" aria-hidden="true" />
-      </ToolbarButton>
-      <ToolbarButton
-        label="Redo"
-        disabled={!editor?.can().chain().focus().redo().run()}
-        onCommand={() => editor?.chain().focus().redo().run()}
-      >
-        <Redo2 className="h-4 w-4" aria-hidden="true" />
-      </ToolbarButton>
-      <ToolbarSeparator />
-      <ToolbarButton
-        label="Heading 1"
-        pressed={editor?.isActive("heading", { level: 1 })}
-        onCommand={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
-      >
-        <Heading1 className="h-4 w-4" aria-hidden="true" />
-      </ToolbarButton>
-      <ToolbarButton
-        label="Heading 2"
-        pressed={editor?.isActive("heading", { level: 2 })}
-        onCommand={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
-      >
-        <Heading2 className="h-4 w-4" aria-hidden="true" />
-      </ToolbarButton>
-      <ToolbarButton
-        label="Heading 3"
-        pressed={editor?.isActive("heading", { level: 3 })}
-        onCommand={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
-      >
-        <Heading3 className="h-4 w-4" aria-hidden="true" />
-      </ToolbarButton>
-      <ToolbarSeparator />
-      <ToolbarButton
-        label="Bold"
-        pressed={editor?.isActive("bold")}
-        onCommand={() => editor?.chain().focus().toggleBold().run()}
-      >
-        <Bold className="h-4 w-4" aria-hidden="true" />
-      </ToolbarButton>
-      <ToolbarButton
-        label="Italic"
-        pressed={editor?.isActive("italic")}
-        onCommand={() => editor?.chain().focus().toggleItalic().run()}
-      >
-        <Italic className="h-4 w-4" aria-hidden="true" />
-      </ToolbarButton>
-      <ToolbarButton
-        label="Inline code"
-        pressed={editor?.isActive("code")}
-        onCommand={() => editor?.chain().focus().toggleCode().run()}
-      >
-        <Code2 className="h-4 w-4" aria-hidden="true" />
-      </ToolbarButton>
-      <ToolbarSeparator />
-      <ToolbarButton
-        label="Bullet list"
-        pressed={editor?.isActive("bulletList")}
-        onCommand={() => editor?.chain().focus().toggleBulletList().run()}
-      >
-        <List className="h-4 w-4" aria-hidden="true" />
-      </ToolbarButton>
-      <ToolbarButton
-        label="Numbered list"
-        pressed={editor?.isActive("orderedList")}
-        onCommand={() => editor?.chain().focus().toggleOrderedList().run()}
-      >
-        <ListOrdered className="h-4 w-4" aria-hidden="true" />
-      </ToolbarButton>
-      <ToolbarButton
-        label="Quote"
-        pressed={editor?.isActive("blockquote")}
-        onCommand={() => editor?.chain().focus().toggleBlockquote().run()}
-      >
-        <Quote className="h-4 w-4" aria-hidden="true" />
-      </ToolbarButton>
+      {editable ? (
+        <>
+          <ToolbarButton
+            label="Undo"
+            disabled={!editor?.can().chain().focus().undo().run()}
+            onCommand={() => editor?.chain().focus().undo().run()}
+          >
+            <Undo2 className="h-4 w-4" aria-hidden="true" />
+          </ToolbarButton>
+          <ToolbarButton
+            label="Redo"
+            disabled={!editor?.can().chain().focus().redo().run()}
+            onCommand={() => editor?.chain().focus().redo().run()}
+          >
+            <Redo2 className="h-4 w-4" aria-hidden="true" />
+          </ToolbarButton>
+          <ToolbarSeparator />
+          <ToolbarButton
+            label="Heading 1"
+            pressed={editor?.isActive("heading", { level: 1 })}
+            onCommand={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
+          >
+            <Heading1 className="h-4 w-4" aria-hidden="true" />
+          </ToolbarButton>
+          <ToolbarButton
+            label="Heading 2"
+            pressed={editor?.isActive("heading", { level: 2 })}
+            onCommand={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
+          >
+            <Heading2 className="h-4 w-4" aria-hidden="true" />
+          </ToolbarButton>
+          <ToolbarButton
+            label="Heading 3"
+            pressed={editor?.isActive("heading", { level: 3 })}
+            onCommand={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
+          >
+            <Heading3 className="h-4 w-4" aria-hidden="true" />
+          </ToolbarButton>
+          <ToolbarSeparator />
+          <ToolbarButton
+            label="Bold"
+            pressed={editor?.isActive("bold")}
+            onCommand={() => editor?.chain().focus().toggleBold().run()}
+          >
+            <Bold className="h-4 w-4" aria-hidden="true" />
+          </ToolbarButton>
+          <ToolbarButton
+            label="Italic"
+            pressed={editor?.isActive("italic")}
+            onCommand={() => editor?.chain().focus().toggleItalic().run()}
+          >
+            <Italic className="h-4 w-4" aria-hidden="true" />
+          </ToolbarButton>
+          <ToolbarButton
+            label="Inline code"
+            pressed={editor?.isActive("code")}
+            onCommand={() => editor?.chain().focus().toggleCode().run()}
+          >
+            <Code2 className="h-4 w-4" aria-hidden="true" />
+          </ToolbarButton>
+          <ToolbarSeparator />
+          <ToolbarButton
+            label="Bullet list"
+            pressed={editor?.isActive("bulletList")}
+            onCommand={() => editor?.chain().focus().toggleBulletList().run()}
+          >
+            <List className="h-4 w-4" aria-hidden="true" />
+          </ToolbarButton>
+          <ToolbarButton
+            label="Numbered list"
+            pressed={editor?.isActive("orderedList")}
+            onCommand={() => editor?.chain().focus().toggleOrderedList().run()}
+          >
+            <ListOrdered className="h-4 w-4" aria-hidden="true" />
+          </ToolbarButton>
+          <ToolbarButton
+            label="Quote"
+            pressed={editor?.isActive("blockquote")}
+            onCommand={() => editor?.chain().focus().toggleBlockquote().run()}
+          >
+            <Quote className="h-4 w-4" aria-hidden="true" />
+          </ToolbarButton>
+        </>
+      ) : null}
+      {actions ? (
+        <div className="ml-auto flex items-center gap-1">
+          {editable ? <ToolbarSeparator /> : null}
+          {actions}
+        </div>
+      ) : null}
     </div>
   );
 }
