@@ -687,7 +687,7 @@ def transcribe(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="openbrief-voicebox")
+    parser = argparse.ArgumentParser(prog="openbrief-localai")
     subcommands = parser.add_subparsers(dest="command", required=True)
 
     subcommands.add_parser("runtime", help="Print Qwen runtime capabilities as JSON")

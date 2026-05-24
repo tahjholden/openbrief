@@ -88,7 +88,7 @@ describe("dev sidecar placeholder setup", () => {
     expect(results.map((result) => result.fileName)).toEqual([
       "openbrief-helper-x86_64-unknown-linux-gnu",
       "openbrief-supertonic-x86_64-unknown-linux-gnu",
-      "openbrief-voicebox-x86_64-unknown-linux-gnu",
+      "openbrief-localai-x86_64-unknown-linux-gnu",
     ]);
   });
 
@@ -105,7 +105,7 @@ describe("dev sidecar placeholder setup", () => {
       expect(results.map((result) => result.fileName)).toEqual([
         sidecarFileName("openbrief-helper", targetTriple),
         sidecarFileName("openbrief-supertonic", targetTriple),
-        sidecarFileName("openbrief-voicebox", targetTriple),
+        sidecarFileName("openbrief-localai", targetTriple),
       ]);
       expect(
         results.some((result) => result.fileName.includes("openbrief-fluidaudio")),

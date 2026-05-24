@@ -8,12 +8,12 @@ use tauri_plugin_shell::ShellExt;
 pub const QWEN_ASR_ENGINE: &str = "qwen3-asr";
 pub const QWEN_ASR_06B_MODEL_ID: &str = "qwen3-asr-0.6B";
 pub const QWEN_ASR_17B_MODEL_ID: &str = "qwen3-asr-1.7B";
-pub const QWEN_ASR_06B_MODEL_DIR: &str = "voicebox/qwen3-asr-0.6B";
-pub const QWEN_ASR_17B_MODEL_DIR: &str = "voicebox/qwen3-asr-1.7B";
+pub const QWEN_ASR_06B_MODEL_DIR: &str = "localai/qwen3-asr-0.6B";
+pub const QWEN_ASR_17B_MODEL_DIR: &str = "localai/qwen3-asr-1.7B";
 pub const QWEN_ASR_06B_SIZE_MB: u64 = 2_400;
 pub const QWEN_ASR_17B_SIZE_MB: u64 = 5_800;
 
-const VOICEBOX_EXTERNAL_BIN_PATH: &str = "openbrief-voicebox";
+const LOCALAI_EXTERNAL_BIN_PATH: &str = "openbrief-localai";
 
 pub fn is_qwen_asr_model_id(model_id: Option<&str>) -> bool {
     matches!(
@@ -63,7 +63,7 @@ pub async fn mark_qwen_asr_model_ready(
 
     fs::create_dir_all(models_root.join(qwen_asr_model_dir(model_id)))
         .map_err(|error| format!("qwen_asr_model_dir_create_failed:{error}"))?;
-    fs::create_dir_all(models_root.join("voicebox").join("cache"))
+    fs::create_dir_all(models_root.join("localai").join("cache"))
         .map_err(|error| format!("qwen_asr_cache_dir_create_failed:{error}"))?;
 
     Ok(("sidecar-downloads-on-demand".to_string(), 0))
@@ -90,10 +90,10 @@ pub async fn run_transcribe_audio<R: Runtime>(
         .and_then(Value::as_str)
         .unwrap_or("auto");
 
-    fs::create_dir_all(models_root.join("voicebox").join("cache"))
+    fs::create_dir_all(models_root.join("localai").join("cache"))
         .map_err(|error| format!("qwen_asr_cache_dir_create_failed:{error}"))?;
 
-    let cache_dir = helper::path_to_string(models_root.join("voicebox").join("cache"));
+    let cache_dir = helper::path_to_string(models_root.join("localai").join("cache"));
     let args = vec![
         "transcribe".to_string(),
         "--model".to_string(),
@@ -120,7 +120,7 @@ pub async fn run_transcribe_audio<R: Runtime>(
     let started_at = Instant::now();
     let output = app
         .shell()
-        .sidecar(VOICEBOX_EXTERNAL_BIN_PATH)
+        .sidecar(LOCALAI_EXTERNAL_BIN_PATH)
         .map_err(|error| format!("qwen_asr_sidecar_unavailable:{error}"))?
         .args(args)
         .output()

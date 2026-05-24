@@ -12,9 +12,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const projectDir = join(__dirname, "..");
 const rustCrateDir = join(projectDir, "src-tauri");
-const sidecarSourceDir = join(rustCrateDir, "sidecars", "voicebox-python");
-const buildRoot = join(rustCrateDir, "target", "voicebox-sidecar");
-const sidecarBaseName = "openbrief-voicebox";
+const sidecarSourceDir = join(rustCrateDir, "sidecars", "localai-python");
+const buildRoot = join(rustCrateDir, "target", "localai-sidecar");
+const sidecarBaseName = "openbrief-localai";
 
 export function releaseModeFromArgs(args) {
   if (args.includes("--debug")) return false;
@@ -39,7 +39,7 @@ export function normalizeBuildProfile(profile) {
   if (["tts", "asr", "smoke"].includes(profile)) {
     return profile;
   }
-  throw new Error(`Unsupported Voicebox build profile '${profile}'. Supported: tts, asr, smoke`);
+  throw new Error(`Unsupported Local AI build profile '${profile}'. Supported: tts, asr, smoke`);
 }
 
 export function buildProfileFromArgs(args) {
@@ -52,7 +52,7 @@ export function buildProfileFromArgs(args) {
     return normalizeBuildProfile(profile);
   }
 
-  return normalizeBuildProfile(process.env.OPENBRIEF_VOICEBOX_PROFILE || "tts");
+  return normalizeBuildProfile(process.env.OPENBRIEF_LOCALAI_PROFILE || "tts");
 }
 
 export function pythonExecutableForPlatform(platform = process.platform) {
@@ -75,9 +75,13 @@ export function pyinstallerOutputPath({ distDir, targetTriple }) {
 export function extrasForBuildProfile({ profile, targetTriple }) {
   const extras = [];
   if (profile === "tts") {
-    extras.push("qwen-tts", "torch");
+    extras.push("qwen-tts");
   } else if (profile === "asr") {
-    extras.push("qwen-asr", "torch");
+    extras.push("qwen-asr");
+  }
+
+  if (targetTriple.includes("apple-darwin") && profile !== "smoke") {
+    extras.push("torch");
   }
 
   if (targetTriple === "aarch64-apple-darwin" && profile !== "smoke") {
@@ -85,6 +89,21 @@ export function extrasForBuildProfile({ profile, targetTriple }) {
   }
 
   return extras;
+}
+
+export function torchInstallArgsForTarget(targetTriple) {
+  if (targetTriple.includes("linux") || targetTriple.includes("windows")) {
+    return [
+      "-m",
+      "pip",
+      "install",
+      "torch>=2.4",
+      "--index-url",
+      "https://download.pytorch.org/whl/cpu",
+    ];
+  }
+
+  return null;
 }
 
 export function pyinstallerCollectArgs({ profile, targetTriple }) {
@@ -123,13 +142,13 @@ export function pyinstallerCollectArgs({ profile, targetTriple }) {
   return args;
 }
 
-export function copyBuiltVoiceboxSidecar({
+export function copyBuiltLocalAiSidecar({
   targetTriple = getHostTriple(),
   sourcePath,
   binariesDir = join(rustCrateDir, "binaries"),
 } = {}) {
   if (!sourcePath || !existsSync(sourcePath)) {
-    throw new Error(`Built Voicebox sidecar not found: ${sourcePath}`);
+    throw new Error(`Built Local AI sidecar not found: ${sourcePath}`);
   }
 
   mkdirSync(binariesDir, { recursive: true });
@@ -149,11 +168,11 @@ export function copyBuiltVoiceboxSidecar({
   };
 }
 
-export function buildVoiceboxSidecar({
+export function buildLocalAiSidecar({
   execFile = execFileSync,
   targetTriple = getHostTriple(),
   hostTriple = getHostTriple(),
-  profile = normalizeBuildProfile(process.env.OPENBRIEF_VOICEBOX_PROFILE || "tts"),
+  profile = normalizeBuildProfile(process.env.OPENBRIEF_LOCALAI_PROFILE || "tts"),
   release = true,
   binariesDir = join(rustCrateDir, "binaries"),
   sourceDir = sidecarSourceDir,
@@ -162,7 +181,7 @@ export function buildVoiceboxSidecar({
 } = {}) {
   if (release && targetTriple !== hostTriple) {
     throw new Error(
-      `PyInstaller cannot cross-compile Voicebox sidecars; build ${targetTriple} on its matching host instead of ${hostTriple}`,
+      `PyInstaller cannot cross-compile Local AI sidecars; build ${targetTriple} on its matching host instead of ${hostTriple}`,
     );
   }
 
@@ -171,7 +190,7 @@ export function buildVoiceboxSidecar({
     baseName: sidecarBaseName,
     targetTriple,
     message:
-      "OpenBrief dev Voicebox sidecar placeholder. Build the PyInstaller sidecar before packaging.",
+      "OpenBrief dev Local AI sidecar placeholder. Build the PyInstaller sidecar before packaging.",
   });
 
   if (!release) {
@@ -199,6 +218,12 @@ export function buildVoiceboxSidecar({
   execFile(python, ["-m", "pip", "install", "pyinstaller"], {
     stdio: "inherit",
   });
+  const torchInstallArgs = torchInstallArgsForTarget(targetTriple);
+  if (profile !== "smoke" && torchInstallArgs) {
+    execFile(python, torchInstallArgs, {
+      stdio: "inherit",
+    });
+  }
   const extras = extrasForBuildProfile({ profile, targetTriple });
   if (extras.length > 0) {
     execFile(python, ["-m", "pip", "install", `${sourceDir}[${extras.join(",")}]`], {
@@ -230,7 +255,7 @@ export function buildVoiceboxSidecar({
       "--specpath",
       specDir,
       ...pyinstallerCollectArgs({ profile, targetTriple }),
-      join(sourceDir, "openbrief_voicebox.py"),
+      join(sourceDir, "openbrief_localai.py"),
     ],
     {
       cwd: sourceDir,
@@ -240,7 +265,7 @@ export function buildVoiceboxSidecar({
 
   return {
     skipped: false,
-    ...copyBuiltVoiceboxSidecar({
+    ...copyBuiltLocalAiSidecar({
       binariesDir,
       targetTriple,
       sourcePath: pyinstallerOutputPath({ distDir, targetTriple }),
@@ -250,15 +275,15 @@ export function buildVoiceboxSidecar({
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const args = process.argv.slice(2);
-  const result = buildVoiceboxSidecar({
+  const result = buildLocalAiSidecar({
     targetTriple: targetTripleFromArgs(args),
     profile: buildProfileFromArgs(args),
     release: releaseModeFromArgs(args),
   });
 
   if (result.skipped) {
-    console.log(`Skipped Voicebox sidecar: ${result.reason}`);
+    console.log(`Skipped Local AI sidecar: ${result.reason}`);
   } else {
-    console.log(`Copied Voicebox sidecar: ${result.destinationName} (${result.size} bytes)`);
+    console.log(`Copied Local AI sidecar: ${result.destinationName} (${result.size} bytes)`);
   }
 }

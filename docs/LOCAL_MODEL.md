@@ -58,7 +58,7 @@ This document defines how OpenBrief should store local model checkpoints and rel
           M5.json
         manifest.json
 
-    voicebox/
+    localai/
       hf/
         hub/
           models--Qwen--Qwen3-TTS-12Hz-0.6B-Base/
@@ -112,7 +112,7 @@ This document defines how OpenBrief should store local model checkpoints and rel
                 voice-message-<time>.wav
 ```
 
-`models/supertonic/hf` and `models/voicebox/hf` are cache/download areas. `models/supertonic/supertonic-3` is the app-owned ready-to-run Supertonic directory. Qwen3-TTS and Qwen3-ASR keep Hugging Face snapshots under `models/voicebox/hf/hub` and choose the MLX or PyTorch repo family at runtime. Runtime state such as imported voice styles and logs belongs under `app-data/supertonic` or model-family runtime directories, not inside checkpoint directories. Generated TTS audio belongs beside the summary or chat artifact it reads, under `app-data/library/{videos,audios,pdfs}/{asset-id}`.
+`models/supertonic/hf` and `models/localai/hf` are cache/download areas. `models/supertonic/supertonic-3` is the app-owned ready-to-run Supertonic directory. Qwen3-TTS and Qwen3-ASR keep Hugging Face snapshots under `models/localai/hf/hub` and choose the MLX or PyTorch repo family at runtime. Runtime state such as imported voice styles and logs belongs under `app-data/supertonic` or model-family runtime directories, not inside checkpoint directories. Generated TTS audio belongs beside the summary or chat artifact it reads, under `app-data/library/{videos,audios,pdfs}/{asset-id}`.
 
 `app-data/supertonic` is model-family runtime data, not checkpoint data:
 
@@ -287,7 +287,7 @@ manifest.json
 
 ## Qwen3-TTS
 
-Qwen3-TTS is the Voicebox-style TTS path for preset read-aloud and future voice cloning. The app bundles a per-platform `openbrief-voicebox` Python sidecar, but does not bundle Qwen model weights. The first use downloads weights into `models/voicebox/hf`.
+Qwen3-TTS is the Local AI TTS path for preset read-aloud and future voice cloning. The app bundles a per-platform `openbrief-localai` Python sidecar, but does not bundle Qwen model weights. The first use downloads weights into `models/localai/hf`.
 
 Supported synthesis languages are Chinese (`zh`), English (`en`), Japanese (`ja`), Korean (`ko`), German (`de`), French (`fr`), Russian (`ru`), Portuguese (`pt`), Spanish (`es`), and Italian (`it`).
 
@@ -296,11 +296,11 @@ Supported synthesis languages are Chinese (`zh`), English (`en`), Japanese (`ja`
 | `qwen-tts-0.6B` | ~1.2 GB | `mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16` | `Qwen/Qwen3-TTS-12Hz-0.6B-Base` |
 | `qwen-tts-1.7B` | ~3.5 GB | `mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16` | `Qwen/Qwen3-TTS-12Hz-1.7B-Base` |
 
-`openbrief-voicebox runtime` reports the active backend. It prefers MLX on Apple Silicon when `mlx` imports successfully, otherwise PyTorch. PyTorch reports CUDA, MPS, and DirectML capability, but the minimal release path is CPU-safe on macOS x86_64, Windows x86_64, and Linux x86_64.
+`openbrief-localai runtime` reports the active backend. It prefers MLX on Apple Silicon when `mlx` imports successfully, otherwise PyTorch. PyTorch reports CUDA, MPS, and DirectML capability, but the minimal release path is CPU-safe on macOS x86_64, Windows x86_64, and Linux x86_64.
 
 ## Qwen3-ASR
 
-Qwen3-ASR is the Voicebox sidecar STT path for timestamped local transcription. OpenBrief does not bundle model weights. The first transcription downloads the selected ASR checkpoint and the forced-aligner checkpoint into the app-owned Voicebox Hugging Face cache.
+Qwen3-ASR is the Local AI sidecar STT path for timestamped local transcription. OpenBrief does not bundle model weights. The first transcription downloads the selected ASR checkpoint and the forced-aligner checkpoint into the app-owned local AI Hugging Face cache.
 
 macOS Apple Silicon uses the MLX-Audio Qwen3-ASR and Qwen3-ForcedAligner ports when available:
 
@@ -343,8 +343,8 @@ Supertonic default generation config:
 | Whisper GGML | Supported | Supported | Supported | Supported | Conditional on helper release target |
 | Parakeet v3 / FluidAudio | Supported on macOS 14+ | Not supported | Not supported | Not supported | Not supported |
 | Supertonic 3 / ONNX Runtime CPU | First-class via PyInstaller sidecar | First-class via PyInstaller sidecar | First-class via PyInstaller sidecar | First-class via PyInstaller sidecar | Conditional on release target and wheel availability |
-| Qwen3-TTS / Voicebox sidecar | MLX preferred, PyTorch fallback | PyTorch CPU | PyTorch CPU, optional CUDA/DirectML later | PyTorch CPU, optional CUDA/ROCm later | Conditional on release target and wheel availability |
-| Qwen3-ASR + ForcedAligner / Voicebox sidecar | MLX-Audio preferred | Official `qwen-asr` PyTorch CPU | Official `qwen-asr` PyTorch CPU, optional CUDA/DirectML later | Official `qwen-asr` PyTorch CPU, optional CUDA/ROCm later | Conditional on release target and wheel availability |
+| Qwen3-TTS / Local AI sidecar | MLX preferred, PyTorch fallback | PyTorch CPU | PyTorch CPU, optional CUDA/DirectML later | PyTorch CPU, optional CUDA/ROCm later | Conditional on release target and wheel availability |
+| Qwen3-ASR + ForcedAligner / Local AI sidecar | MLX-Audio preferred | Official `qwen-asr` PyTorch CPU | Official `qwen-asr` PyTorch CPU, optional CUDA/DirectML later | Official `qwen-asr` PyTorch CPU, optional CUDA/ROCm later | Conditional on release target and wheel availability |
 
 Notes:
 
@@ -359,8 +359,8 @@ Notes:
 | Whisper | Rust downloads direct GGML file to `.partial`, verifies SHA1, then renames. | Final `ggml-*.bin` exists and checksum matched during download. | Keep or remove `.partial`; never mark final file ready on checksum mismatch. |
 | Parakeet | Rust asks the FluidAudio sidecar to download into `models/fluidaudio/parakeet-tdt-0.6b-v3`. | Required CoreML directories and `parakeet_vocab.json` exist. | Hide from catalog on unsupported OS; fall back to Whisper when auto routing cannot use FluidAudio. |
 | Supertonic | PyInstaller sidecar downloads or materializes assets into `models/supertonic`. | Existing chat/summary audio is discovered under library-scoped `tts` directories; future explicit model status should verify required ONNX files, voice styles, and `manifest.json`. | Report not ready and keep renderer away from raw cache paths. |
-| Qwen3-TTS | Voicebox PyInstaller sidecar downloads Hugging Face snapshots into `models/voicebox/hf`. | Sidecar `models` and future status commands report the backend-specific repo and cache state. | Report not ready; do not expose raw HF cache paths to the renderer. |
-| Qwen3-ASR | Voicebox PyInstaller sidecar downloads ASR and forced-aligner snapshots into `models/voicebox/hf` on first transcription. | STT catalog treats the sidecar-managed model as selectable; the sidecar owns actual snapshot readiness. | Fall back only when the user selects another STT model; Qwen timestamp languages should fail clearly if unsupported by the aligner. |
+| Qwen3-TTS | Local AI PyInstaller sidecar downloads Hugging Face snapshots into `models/localai/hf`. | Sidecar `models` and future status commands report the backend-specific repo and cache state. | Report not ready; do not expose raw HF cache paths to the renderer. |
+| Qwen3-ASR | Local AI PyInstaller sidecar downloads ASR and forced-aligner snapshots into `models/localai/hf` on first transcription. | STT catalog treats the sidecar-managed model as selectable; the sidecar owns actual snapshot readiness. | Fall back only when the user selects another STT model; Qwen timestamp languages should fail clearly if unsupported by the aligner. |
 
 ## Implementation Anchors
 

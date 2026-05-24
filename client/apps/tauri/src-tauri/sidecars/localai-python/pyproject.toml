@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "openbrief-voicebox"
+name = "openbrief-localai"
 version = "0.1.0"
-description = "OpenBrief Voicebox sidecar for Qwen3-TTS"
+description = "OpenBrief Local AI sidecar for Qwen3-TTS"
 requires-python = ">=3.10"
 dependencies = []
 
@@ -36,7 +36,7 @@ mlx = [
 ]
 
 [project.scripts]
-openbrief-voicebox = "openbrief_voicebox:main"
+openbrief-localai = "openbrief_localai:main"
 
 [tool.setuptools]
-py-modules = ["openbrief_voicebox"]
+py-modules = ["openbrief_localai"]

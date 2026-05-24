@@ -1,20 +1,21 @@
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  buildVoiceboxSidecar,
+  buildLocalAiSidecar,
   buildProfileFromArgs,
-  copyBuiltVoiceboxSidecar,
+  copyBuiltLocalAiSidecar,
   extrasForBuildProfile,
   pyinstallerCollectArgs,
   pyinstallerOutputPath,
   releaseModeFromArgs,
   targetTripleFromArgs,
+  torchInstallArgsForTarget,
   venvPythonPath,
-} from "./build-voicebox-sidecar.js";
+} from "./build-localai-sidecar.js";
 
-describe("Voicebox sidecar build script", () => {
+describe("Local AI sidecar build script", () => {
   it("defaults to release builds for packaging", () => {
     expect(releaseModeFromArgs([])).toBe(true);
   });
@@ -44,13 +45,13 @@ describe("Voicebox sidecar build script", () => {
         profile: "tts",
         targetTriple: "x86_64-unknown-linux-gnu",
       }),
-    ).toEqual(["qwen-tts", "torch"]);
+    ).toEqual(["qwen-tts"]);
     expect(
       extrasForBuildProfile({
         profile: "asr",
         targetTriple: "x86_64-unknown-linux-gnu",
       }),
-    ).toEqual(["qwen-asr", "torch"]);
+    ).toEqual(["qwen-asr"]);
   });
 
   it("adds MLX dependencies only for native Apple Silicon model profiles", () => {
@@ -66,6 +67,26 @@ describe("Voicebox sidecar build script", () => {
         targetTriple: "aarch64-apple-darwin",
       }),
     ).toEqual([]);
+  });
+
+  it("pins CPU-only Torch wheels for Linux and Windows release sidecars", () => {
+    expect(torchInstallArgsForTarget("x86_64-unknown-linux-gnu")).toEqual([
+      "-m",
+      "pip",
+      "install",
+      "torch>=2.4",
+      "--index-url",
+      "https://download.pytorch.org/whl/cpu",
+    ]);
+    expect(torchInstallArgsForTarget("x86_64-pc-windows-msvc")).toEqual([
+      "-m",
+      "pip",
+      "install",
+      "torch>=2.4",
+      "--index-url",
+      "https://download.pytorch.org/whl/cpu",
+    ]);
+    expect(torchInstallArgsForTarget("aarch64-apple-darwin")).toBeNull();
   });
 
   it("collects only installed model modules for PyInstaller", () => {
@@ -105,28 +126,28 @@ describe("Voicebox sidecar build script", () => {
         distDir: "/tmp/dist",
         targetTriple: "x86_64-pc-windows-msvc",
       }),
-    ).toMatch(/openbrief-voicebox\.exe$/);
+    ).toMatch(/openbrief-localai\.exe$/);
   });
 
   it("copies built sidecars to the Tauri target-triple name", () => {
-    const root = mkdtempSync(join(tmpdir(), "openbrief-voicebox-copy-"));
-    const sourcePath = join(root, "openbrief-voicebox");
+    const root = mkdtempSync(join(tmpdir(), "openbrief-localai-copy-"));
+    const sourcePath = join(root, "openbrief-localai");
     const binariesDir = join(root, "binaries");
     writeFileSync(sourcePath, "#!/bin/sh\n");
 
-    const result = copyBuiltVoiceboxSidecar({
+    const result = copyBuiltLocalAiSidecar({
       sourcePath,
       binariesDir,
       targetTriple: "aarch64-apple-darwin",
     });
 
-    expect(result.destinationName).toBe("openbrief-voicebox-aarch64-apple-darwin");
+    expect(result.destinationName).toBe("openbrief-localai-aarch64-apple-darwin");
     expect(existsSync(result.destinationPath)).toBe(true);
   });
 
   it("creates a placeholder and skips PyInstaller in debug mode", () => {
-    const root = mkdtempSync(join(tmpdir(), "openbrief-voicebox-build-"));
-    const result = buildVoiceboxSidecar({
+    const root = mkdtempSync(join(tmpdir(), "openbrief-localai-build-"));
+    const result = buildLocalAiSidecar({
       root,
       binariesDir: join(root, "binaries"),
       targetTriple: "x86_64-unknown-linux-gnu",
@@ -138,15 +159,51 @@ describe("Voicebox sidecar build script", () => {
 
     expect(result.skipped).toBe(true);
     expect(
-      existsSync(join(root, "binaries", "openbrief-voicebox-x86_64-unknown-linux-gnu")),
+      existsSync(join(root, "binaries", "openbrief-localai-x86_64-unknown-linux-gnu")),
     ).toBe(true);
   });
 
+  it("installs CPU Torch before Qwen extras on Linux release builds", () => {
+    const root = mkdtempSync(join(tmpdir(), "openbrief-localai-release-"));
+    const sourceDir = join(root, "source");
+    const commands: string[][] = [];
+    mkdirSync(sourceDir, { recursive: true });
+    writeFileSync(join(sourceDir, "openbrief_localai.py"), "print('localai')\n");
+
+    const result = buildLocalAiSidecar({
+      root,
+      sourceDir,
+      binariesDir: join(root, "binaries"),
+      targetTriple: "x86_64-unknown-linux-gnu",
+      hostTriple: "x86_64-unknown-linux-gnu",
+      release: true,
+      execFile: (_command, args) => {
+        commands.push(args.map(String));
+        if (args.includes("PyInstaller")) {
+          const distDir = join(root, "dist", "x86_64-unknown-linux-gnu");
+          mkdirSync(distDir, { recursive: true });
+          writeFileSync(join(distDir, "openbrief-localai"), "#!/bin/sh\n");
+        }
+      },
+    });
+
+    const torchInstallIndex = commands.findIndex((args) =>
+      args.includes("https://download.pytorch.org/whl/cpu"),
+    );
+    const qwenInstallIndex = commands.findIndex((args) =>
+      args.some((arg) => arg.endsWith("[qwen-tts]")),
+    );
+
+    expect(result.skipped).toBe(false);
+    expect(torchInstallIndex).toBeGreaterThan(-1);
+    expect(qwenInstallIndex).toBeGreaterThan(torchInstallIndex);
+  });
+
   it("rejects cross-target PyInstaller release builds", () => {
-    const root = mkdtempSync(join(tmpdir(), "openbrief-voicebox-cross-"));
+    const root = mkdtempSync(join(tmpdir(), "openbrief-localai-cross-"));
 
     expect(() =>
-      buildVoiceboxSidecar({
+      buildLocalAiSidecar({
         root,
         binariesDir: join(root, "binaries"),
         targetTriple: "x86_64-pc-windows-msvc",

@@ -13,7 +13,7 @@ describe("Tauri sidecar configuration", () => {
     expect(config.bundle.externalBin).toEqual([
       "binaries/openbrief-helper",
       "binaries/openbrief-supertonic",
-      "binaries/openbrief-voicebox",
+      "binaries/openbrief-localai",
     ]);
     expect(config.bundle.externalBin).not.toContain("binaries/openbrief-fluidaudio");
   });
@@ -26,7 +26,7 @@ describe("Tauri sidecar configuration", () => {
     expect(macosConfig.bundle.externalBin).toEqual([
       "binaries/openbrief-helper",
       "binaries/openbrief-supertonic",
-      "binaries/openbrief-voicebox",
+      "binaries/openbrief-localai",
       "binaries/openbrief-fluidaudio",
     ]);
   });
