@@ -887,7 +887,7 @@ export function WorkbenchView({
             activeSummaryId={activeSummary?.id}
             onSelectSummaryTab={onSelectSummaryTab}
           />
-          <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border p-4">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             {summaryJob ? (
               <AiGenerationStatus
                 job={summaryJob}
@@ -1799,7 +1799,7 @@ function AiGenerationStatus({
         </span>
         <span className="text-xs text-muted-foreground">
           {job.provider}
-          {job.model ? ` · ${job.model}` : ""}
+          {job.model ? ` · ${shortProviderModelName(job.model)}` : ""}
         </span>
       </div>
       {job.errorMessage ? (

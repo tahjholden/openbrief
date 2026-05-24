@@ -80,12 +80,12 @@ export function MarkdownSummaryEditor({
   return (
     <div
       className={cn(
-        "flex min-h-full flex-col overflow-hidden rounded-md",
+        "flex min-h-full flex-col",
         className,
       )}
     >
       {editable ? <MarkdownEditorToolbar editor={editor} /> : null}
-      <div className="min-h-0 flex-1 px-4 py-3">
+      <div className={cn("min-h-0 flex-1 px-3", editable && "pt-3")}>
         <EditorContent editor={editor} />
       </div>
     </div>
@@ -95,7 +95,7 @@ export function MarkdownSummaryEditor({
 function MarkdownEditorToolbar({ editor }: { editor: Editor | null }) {
   return (
     <div
-      className="flex flex-wrap items-center gap-1 border-b border-border bg-muted/30 px-2 py-1.5"
+      className="sticky top-0 z-10 flex flex-wrap items-center gap-1 rounded-t-md border-b border-border bg-muted px-2 py-1.5"
       aria-label="Markdown formatting toolbar"
     >
       <ToolbarButton

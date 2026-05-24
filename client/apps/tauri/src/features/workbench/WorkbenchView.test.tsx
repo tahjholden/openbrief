@@ -537,6 +537,26 @@ describe("WorkbenchView", () => {
       .toBeDisabled();
   });
 
+  it("shortens model names in the summary generation status", () => {
+    render(
+      <WorkbenchView
+        {...defaultProps({
+          transcript: transcriptFixture,
+          summaryJob: {
+            ...summaryJobFixture,
+            provider: "openrouter",
+            model: "deepseek/deepseek-v4-flash",
+          },
+        })}
+      />,
+    );
+
+    expect(screen.getByText("openrouter · deepseek-v4-flash"))
+      .toBeInTheDocument();
+    expect(screen.queryByText("openrouter · deepseek/deepseek-v4-flash"))
+      .not.toBeInTheDocument();
+  });
+
   it("renders streaming summary draft markdown while generation is running", () => {
     render(
       <WorkbenchView

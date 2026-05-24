@@ -893,7 +893,7 @@ function FinderStatusPill({
   children: ReactNode;
 }) {
   if (active) {
-    return <Badge className="gap-1 text-muted-foreground">{children}</Badge>;
+    return <Badge className="gap-1">{children}</Badge>;
   }
 
   return (
