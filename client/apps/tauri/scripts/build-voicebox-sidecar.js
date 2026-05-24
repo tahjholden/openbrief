@@ -75,9 +75,13 @@ export function pyinstallerOutputPath({ distDir, targetTriple }) {
 export function extrasForBuildProfile({ profile, targetTriple }) {
   const extras = [];
   if (profile === "tts") {
-    extras.push("qwen-tts", "torch");
+    extras.push("qwen-tts");
   } else if (profile === "asr") {
-    extras.push("qwen-asr", "torch");
+    extras.push("qwen-asr");
+  }
+
+  if (targetTriple.includes("apple-darwin") && profile !== "smoke") {
+    extras.push("torch");
   }
 
   if (targetTriple === "aarch64-apple-darwin" && profile !== "smoke") {
@@ -85,6 +89,21 @@ export function extrasForBuildProfile({ profile, targetTriple }) {
   }
 
   return extras;
+}
+
+export function torchInstallArgsForTarget(targetTriple) {
+  if (targetTriple.includes("linux") || targetTriple.includes("windows")) {
+    return [
+      "-m",
+      "pip",
+      "install",
+      "torch>=2.4",
+      "--index-url",
+      "https://download.pytorch.org/whl/cpu",
+    ];
+  }
+
+  return null;
 }
 
 export function pyinstallerCollectArgs({ profile, targetTriple }) {
@@ -199,6 +218,12 @@ export function buildVoiceboxSidecar({
   execFile(python, ["-m", "pip", "install", "pyinstaller"], {
     stdio: "inherit",
   });
+  const torchInstallArgs = torchInstallArgsForTarget(targetTriple);
+  if (profile !== "smoke" && torchInstallArgs) {
+    execFile(python, torchInstallArgs, {
+      stdio: "inherit",
+    });
+  }
   const extras = extrasForBuildProfile({ profile, targetTriple });
   if (extras.length > 0) {
     execFile(python, ["-m", "pip", "install", `${sourceDir}[${extras.join(",")}]`], {
