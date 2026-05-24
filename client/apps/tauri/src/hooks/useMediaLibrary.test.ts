@@ -1102,7 +1102,7 @@ describe("useMediaLibrary", () => {
     const lastSnapshot = savedSnapshots[savedSnapshots.length - 1];
 
     expect(lastSnapshot?.summariesByVideoId["video-1"]?.artifactPath).toContain(
-      "videos/video-1/summary/summary-video-1-",
+      "videos/video-1/summary/Design-Review-summary-",
     );
     expect(lastSnapshot?.summaryHistoryByVideoId["video-1"]).toHaveLength(1);
     expect(lastSnapshot?.chatMessagesByVideoId["video-1"]?.[0]).toMatchObject({
