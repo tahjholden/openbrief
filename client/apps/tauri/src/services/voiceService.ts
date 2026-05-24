@@ -1,3 +1,4 @@
+import type { LocalFileDialogService } from "@/services/localFileDialogService";
 import type { TauriInvoke } from "@/services/tauriHelperClient";
 import type {
   QwenPresetVoiceId,
@@ -5,6 +6,7 @@ import type {
   TtsLanguageCode,
   TtsModelId,
 } from "@/services/ttsSettingsService";
+import { createLocalFileDialogService } from "@/services/localFileDialogService";
 import { canUseTauriRuntime } from "@/services/tauriHelperClient";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -36,6 +38,7 @@ export type TtsPreviewResult = {
   language: TtsLanguageCode;
   sizeBytes: number;
   audioUrl: string;
+  audioBytes: Uint8Array;
 };
 
 type RawTtsPreviewResult = {
@@ -44,6 +47,16 @@ type RawTtsPreviewResult = {
   language: TtsLanguageCode;
   sizeBytes: number;
   audioBytes: number[];
+};
+
+export type SaveTtsPreviewAudioRequest = {
+  audioBytes: Uint8Array | number[];
+  defaultFileName: string;
+};
+
+export type SaveTtsPreviewAudioResult = {
+  targetPath: string;
+  bytesWritten: number;
 };
 
 export async function listTtsVoices(invokeCommand: TauriInvoke = invoke) {
@@ -74,7 +87,8 @@ export async function generateTtsPreview(
       },
     },
   );
-  const audioBlob = new Blob([new Uint8Array(result.audioBytes)], {
+  const audioBytes = new Uint8Array(result.audioBytes);
+  const audioBlob = new Blob([audioBytes], {
     type: "audio/wav",
   });
 
@@ -84,5 +98,69 @@ export async function generateTtsPreview(
     language: result.language,
     sizeBytes: result.sizeBytes,
     audioUrl: URL.createObjectURL(audioBlob),
+    audioBytes,
+  };
+}
+
+export async function saveTtsPreviewAudio(
+  request: SaveTtsPreviewAudioRequest,
+  {
+    invokeCommand = invoke,
+    fileDialogService = createLocalFileDialogService(),
+  }: {
+    invokeCommand?: TauriInvoke;
+    fileDialogService?: LocalFileDialogService;
+  } = {},
+): Promise<SaveTtsPreviewAudioResult | undefined> {
+  const targetPath = await fileDialogService.selectSavePath({
+    title: "Export voice preview",
+    defaultPath: request.defaultFileName,
+    filters: [{ name: "Audio", extensions: ["wav"] }],
+  });
+
+  if (!targetPath) {
+    return undefined;
+  }
+
+  const { outputDirectory, fileName } = splitExportTargetPath(targetPath);
+  return invokeCommand<SaveTtsPreviewAudioResult>("export_tts_preview_audio", {
+    audioBytes: Array.from(request.audioBytes),
+    outputDirectory,
+    fileName: ensureWavFileName(fileName),
+  });
+}
+
+export function createTtsPreviewDefaultFileName(text: string) {
+  const stem = Array.from(text.trim())
+    .slice(0, 20)
+    .join("")
+    .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^[.\s-]+|[.\s-]+$/g, "");
+
+  return `${stem || "voice-preview"}.wav`;
+}
+
+function ensureWavFileName(fileName: string) {
+  return /\.[A-Za-z0-9]+$/.test(fileName) ? fileName : `${fileName}.wav`;
+}
+
+function splitExportTargetPath(targetPath: string) {
+  const slashIndex = Math.max(
+    targetPath.lastIndexOf("/"),
+    targetPath.lastIndexOf("\\"),
+  );
+
+  if (slashIndex < 0) {
+    return {
+      outputDirectory: ".",
+      fileName: targetPath,
+    };
+  }
+
+  return {
+    outputDirectory: targetPath.slice(0, slashIndex) || ".",
+    fileName: targetPath.slice(slashIndex + 1),
   };
 }

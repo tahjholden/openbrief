@@ -6,6 +6,7 @@ import type {
 } from "@/services/ttsSettingsService";
 import type {
   GenerateTtsPreviewRequest,
+  SaveTtsPreviewAudioRequest,
   TtsPreviewResult,
   TtsVoiceCatalogModel,
 } from "@/services/voiceService";
@@ -13,7 +14,12 @@ import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/i18n";
 import { defaultLanguageForModel } from "@/services/ttsSettingsService";
-import { generateTtsPreview, listTtsVoices } from "@/services/voiceService";
+import {
+  createTtsPreviewDefaultFileName,
+  generateTtsPreview,
+  listTtsVoices,
+  saveTtsPreviewAudio,
+} from "@/services/voiceService";
 import {
   Download,
   Loader2,
@@ -50,6 +56,9 @@ type VoicesViewProps = {
   onGeneratePreview?: (
     request: GenerateTtsPreviewRequest,
   ) => Promise<TtsPreviewResult>;
+  onSavePreviewAudio?: (
+    request: SaveTtsPreviewAudioRequest,
+  ) => Promise<unknown>;
 };
 
 const defaultPreviewText =
@@ -58,6 +67,7 @@ const defaultPreviewText =
 export function VoicesView({
   loadVoices = listTtsVoices,
   onGeneratePreview = generateTtsPreview,
+  onSavePreviewAudio = saveTtsPreviewAudio,
 }: VoicesViewProps) {
   const { t } = useI18n();
   const [catalog, setCatalog] = useState<TtsVoiceCatalogModel[]>([]);
@@ -65,8 +75,10 @@ export function VoicesView({
   const [languageCode, setLanguageCode] = useState<TtsLanguageCode>("en");
   const [text, setText] = useState(defaultPreviewText);
   const [preview, setPreview] = useState<TtsPreviewResult>();
+  const [previewText, setPreviewText] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSavingPreview, setIsSavingPreview] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>();
 
   const voiceOptions = useMemo(
@@ -175,11 +187,29 @@ export function VoicesView({
       });
       revokeObjectUrl(preview?.audioUrl);
       setPreview(nextPreview);
+      setPreviewText(text);
       setCatalog(await loadVoices());
     } catch (error) {
       setErrorMessage(errorMessageFromUnknown(error));
     } finally {
       setIsGenerating(false);
+    }
+  }
+
+  async function savePreviewAudio() {
+    if (!preview || isSavingPreview) return;
+
+    setIsSavingPreview(true);
+    setErrorMessage(undefined);
+    try {
+      await onSavePreviewAudio({
+        audioBytes: preview.audioBytes,
+        defaultFileName: createTtsPreviewDefaultFileName(previewText || text),
+      });
+    } catch (error) {
+      setErrorMessage(errorMessageFromUnknown(error));
+    } finally {
+      setIsSavingPreview(false);
     }
   }
 
@@ -189,9 +219,7 @@ export function VoicesView({
         <Card>
           <CardHeader className="space-y-1">
             <CardTitle>{t("voices.preview.title")}</CardTitle>
-            <CardDescription>
-              {t("voices.preview.description")}
-            </CardDescription>
+            <CardDescription>{t("voices.preview.description")}</CardDescription>
           </CardHeader>
           <CardContent>
             <form className="grid gap-4" onSubmit={submitPreview}>
@@ -289,14 +317,21 @@ export function VoicesView({
                     className="min-w-0 flex-1"
                     aria-label={t("voices.preview.audio")}
                   />
-                  <Button variant="outline" asChild>
-                    <a
-                      href={preview.audioUrl}
-                      download="openbrief-voice-preview.wav"
-                    >
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void savePreviewAudio()}
+                    disabled={isSavingPreview}
+                  >
+                    {isSavingPreview ? (
+                      <Loader2
+                        className="h-4 w-4 animate-spin"
+                        aria-hidden="true"
+                      />
+                    ) : (
                       <Download className="h-4 w-4" aria-hidden="true" />
-                      {t("voices.preview.download")}
-                    </a>
+                    )}
+                    {t("voices.preview.download")}
                   </Button>
                 </div>
                 <p className="text-muted-foreground text-xs">

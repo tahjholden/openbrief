@@ -190,6 +190,7 @@ pub fn run() {
             trusted_paths::write_markdown_summary,
             trusted_paths::write_text_artifact,
             trusted_paths::export_library_artifact,
+            trusted_paths::export_tts_preview_audio,
             hide_transcript_overlay,
         ])
         .run(tauri::generate_context!())

@@ -54,12 +54,15 @@ describe("VoicesView", () => {
       language: "en" as const,
       sizeBytes: 2048,
       audioUrl: "blob:voice-preview",
+      audioBytes: new Uint8Array([1, 2, 3]),
     }));
+    const onSavePreviewAudio = vi.fn(async () => undefined);
 
     render(
       <VoicesView
         loadVoices={async () => catalog}
         onGeneratePreview={onGeneratePreview}
+        onSavePreviewAudio={onSavePreviewAudio}
       />,
     );
 
@@ -87,14 +90,13 @@ describe("VoicesView", () => {
       "src",
       "blob:voice-preview",
     );
-    expect(screen.getByRole("link", { name: "Download" })).toHaveAttribute(
-      "download",
-      "openbrief-voice-preview.wav",
-    );
-    expect(screen.getByRole("link", { name: "Download" })).toHaveAttribute(
-      "href",
-      "blob:voice-preview",
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Download" }));
+    await waitFor(() => {
+      expect(onSavePreviewAudio).toHaveBeenCalledWith({
+        audioBytes: new Uint8Array([1, 2, 3]),
+        defaultFileName: "Generate this simple.wav",
+      });
+    });
     expect(screen.getByText("Preview ready (2 KB)")).toBeInTheDocument();
   });
 });

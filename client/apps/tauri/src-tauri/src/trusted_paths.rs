@@ -49,6 +49,13 @@ pub struct ArtifactExportResult {
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct TtsPreviewAudioExportResult {
+    target_path: String,
+    bytes_written: usize,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct LocalFileImportResult {
     asset_id: String,
     original_file_name: String,
@@ -270,6 +277,15 @@ pub fn export_library_artifact<R: Runtime>(
     )
 }
 
+#[tauri::command]
+pub fn export_tts_preview_audio(
+    audio_bytes: Vec<u8>,
+    output_directory: String,
+    file_name: String,
+) -> Result<TtsPreviewAudioExportResult, String> {
+    export_tts_preview_audio_to_directory(audio_bytes, output_directory, file_name)
+}
+
 fn export_library_artifact_from_root(
     library_root: PathBuf,
     source_relative_path: String,
@@ -339,6 +355,37 @@ fn export_library_artifact_from_root(
         target_path: path_to_string(target_path),
         source_relative_path,
         bytes_written,
+    })
+}
+
+fn export_tts_preview_audio_to_directory(
+    audio_bytes: Vec<u8>,
+    output_directory: String,
+    file_name: String,
+) -> Result<TtsPreviewAudioExportResult, String> {
+    if audio_bytes.is_empty() {
+        return Err("tts_preview_audio_empty".to_string());
+    }
+
+    let output_directory = validate_existing_export_directory(&PathBuf::from(output_directory))?;
+    let target_path = output_directory.join(sanitize_export_file_name_preserving_stem(&file_name));
+
+    if path_is_symlink(&target_path)? {
+        return Err("tts_preview_target_must_not_be_symlink".to_string());
+    }
+
+    let mut file = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(&target_path)
+        .map_err(|error| format!("tts_preview_export_failed:{error}"))?;
+    file.write_all(&audio_bytes)
+        .map_err(|error| format!("tts_preview_export_failed:{error}"))?;
+
+    Ok(TtsPreviewAudioExportResult {
+        target_path: path_to_string(target_path),
+        bytes_written: audio_bytes.len(),
     })
 }
 
@@ -657,6 +704,14 @@ fn sanitize_path_segment(value: &str) -> String {
 }
 
 fn sanitize_export_file_name(value: &str) -> String {
+    sanitize_export_file_name_with_stem_limit(value, Some(20))
+}
+
+fn sanitize_export_file_name_preserving_stem(value: &str) -> String {
+    sanitize_export_file_name_with_stem_limit(value, None)
+}
+
+fn sanitize_export_file_name_with_stem_limit(value: &str, stem_limit: Option<usize>) -> String {
     let normalized: String = value
         .trim()
         .chars()
@@ -679,11 +734,14 @@ fn sanitize_export_file_name(value: &str) -> String {
         _ => (trimmed.as_str(), ""),
     };
     let trimmed_stem = stem.trim_matches(['.', ' ', '-']);
-    let truncated_stem: String = trimmed_stem.chars().take(20).collect();
-    let file_stem = if truncated_stem.is_empty() {
+    let limited_stem: String = match stem_limit {
+        Some(limit) => trimmed_stem.chars().take(limit).collect(),
+        None => trimmed_stem.to_string(),
+    };
+    let file_stem = if limited_stem.is_empty() {
         "untitled".to_string()
     } else {
-        truncated_stem
+        limited_stem
     };
 
     format!("{file_stem}{extension}")
@@ -1009,6 +1067,41 @@ mod tests {
             fs::read_to_string(output.join(expected_file_name)).unwrap(),
             "summary"
         );
+    }
+
+    #[test]
+    fn exports_tts_preview_audio_to_user_selected_directory() {
+        let fixture = TestFixture::new("trusted-tts-preview-export");
+        let output = fixture.create_dir("exports");
+
+        let result = export_tts_preview_audio_to_directory(
+            vec![1, 2, 3, 4],
+            path_to_string(output.clone()),
+            "A much longer custom preview filename.wav".to_string(),
+        )
+        .unwrap();
+
+        let expected_file_name = "A much longer custom preview filename.wav";
+        assert!(result.target_path.ends_with(expected_file_name));
+        assert_eq!(result.bytes_written, 4);
+        assert_eq!(
+            fs::read(output.join(expected_file_name)).unwrap(),
+            vec![1, 2, 3, 4]
+        );
+    }
+
+    #[test]
+    fn rejects_empty_tts_preview_audio_export() {
+        let fixture = TestFixture::new("trusted-tts-preview-empty");
+        let output = fixture.create_dir("exports");
+
+        let result = export_tts_preview_audio_to_directory(
+            vec![],
+            path_to_string(output),
+            "preview.wav".to_string(),
+        );
+
+        assert_eq!(result.unwrap_err(), "tts_preview_audio_empty");
     }
 
     #[test]
