@@ -4,7 +4,9 @@ import {
   chunkTranscriptSegments,
   createSummaryDocument,
   createSummaryPrompt,
+  createSummaryTimestampHref,
   getVideoSummaryTemplate,
+  parseSummaryTimestampHref,
 } from "@/domain/summary";
 
 const video: VideoAsset = {
@@ -72,6 +74,10 @@ describe("summary domain", () => {
     expect(prompt.systemPrompt).toContain("## Key Takeaways");
     expect(prompt.systemPrompt).toContain("## Final Thought");
     expect(prompt.systemPrompt).toContain("Never invent a timestamp");
+    expect(prompt.systemPrompt).toContain(
+      "[linked text](#openbrief-timestamp-SECONDS)",
+    );
+    expect(prompt.systemPrompt).toContain("Do not use VIDEO_URL&t=SECONDS");
     expect(prompt.userPrompt).toContain("VIDEO_TITLE: Design Review");
     expect(prompt.userPrompt).toContain("VIDEO_URL: https://youtu.be/example");
     expect(prompt.userPrompt).toContain("SUMMARY_TEMPLATE: Documentary report");
@@ -93,7 +99,16 @@ describe("summary domain", () => {
 
     expect(prompt.systemPrompt).toContain("Write a custom editorial report.");
     expect(prompt.systemPrompt).toContain("Length mode: short");
+    expect(prompt.systemPrompt).toContain("OpenBrief timestamp link contract");
     expect(prompt.systemPrompt).not.toContain("blog-post-style Markdown article");
+  });
+
+  it("creates and parses custom summary timestamp links", () => {
+    expect(createSummaryTimestampHref(30.8)).toBe("#openbrief-timestamp-30");
+    expect(parseSummaryTimestampHref("#openbrief-timestamp-30")).toBe(30);
+    expect(parseSummaryTimestampHref("openbrief://timestamp/30")).toBe(30);
+    expect(parseSummaryTimestampHref("#openbrief-timestamp-30.5")).toBeUndefined();
+    expect(parseSummaryTimestampHref("https://example.com?t=30")).toBeUndefined();
   });
 
   it("falls back to the YouTube blog template for default callers", () => {

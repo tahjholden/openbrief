@@ -45,6 +45,9 @@ export type VideoSummaryTemplate = {
   systemPrompt: string;
 };
 
+export const summaryTimestampHrefPrefix = "#openbrief-timestamp-";
+const legacySummaryTimestampHrefPrefix = "openbrief://timestamp/";
+
 export const YOUTUBE_BLOG_SUMMARY_SYSTEM_PROMPT = [
   "You are an expert YouTube summarizer and editorial writer.",
   "Turn the provided transcript into a polished, blog-post-style Markdown article that lets the reader understand the video without watching it, while still making the original video easy to navigate.",
@@ -61,10 +64,11 @@ export const YOUTUBE_BLOG_SUMMARY_SYSTEM_PROMPT = [
   "Timestamp rules:",
   "- Use only timestamps present in the transcript or metadata.",
   "- Never invent a timestamp. Never use a timestamp later than LAST_AVAILABLE_TIMESTAMP.",
-  "- Format timestamps as Markdown links when VIDEO_URL is provided: [MM:SS](VIDEO_URL&t=SECONDS) or [HH:MM:SS](VIDEO_URL&t=SECONDS).",
-  "- If timestamp links cannot be built, use bracketed timestamps only: [MM:SS].",
-  "- Each major section must include one primary timestamp near its heading.",
-  "- Timestamp labels should point to the beginning of the relevant idea.",
+  "- Use OpenBrief timestamp links instead of external video links: [MM:SS](#openbrief-timestamp-SECONDS) or [HH:MM:SS](#openbrief-timestamp-SECONDS).",
+  "- To link a summary sentence to the source media, wrap the complete sentence in the same timestamp link: [The complete sentence.](#openbrief-timestamp-SECONDS)",
+  "- To link a paragraph, link the first sentence or the timestamp at the beginning of that paragraph. Do not wrap multi-paragraph blocks in one link.",
+  "- Each major section must include one primary OpenBrief timestamp link near its heading.",
+  "- Timestamp targets should point to the beginning of the relevant idea.",
   "",
   "Image rules:",
   "- Use only provided thumbnails, images, frames, or slide URLs.",
@@ -272,6 +276,8 @@ export function createSummaryPrompt({
           ]
         : []),
       createLengthModeInstruction(lengthMode),
+      "",
+      createSummaryTimestampLinkInstruction(),
     ].join("\n"),
     userPrompt: [
       `VIDEO_TITLE: ${video.title}`,
@@ -298,6 +304,24 @@ export function createSummaryPrompt({
     ].join("\n"),
     chunks,
   };
+}
+
+export function createSummaryTimestampHref(totalSeconds: number) {
+  return `${summaryTimestampHrefPrefix}${Math.max(0, Math.floor(totalSeconds))}`;
+}
+
+export function parseSummaryTimestampHref(href: unknown): number | undefined {
+  if (typeof href !== "string") return undefined;
+
+  const rawValue = href.startsWith(summaryTimestampHrefPrefix)
+    ? href.slice(summaryTimestampHrefPrefix.length)
+    : href.startsWith(legacySummaryTimestampHrefPrefix)
+      ? href.slice(legacySummaryTimestampHrefPrefix.length)
+      : undefined;
+  if (rawValue === undefined) return undefined;
+
+  const seconds = Number(rawValue);
+  return Number.isInteger(seconds) && seconds >= 0 ? seconds : undefined;
 }
 
 export function createSummaryDocument({
@@ -397,4 +421,14 @@ function createLengthModeInstruction(lengthMode: SummaryLengthMode) {
         "Use balanced depth: enough detail to replace watching the video for most readers without becoming a transcript rewrite.",
       ].join("\n");
   }
+}
+
+function createSummaryTimestampLinkInstruction() {
+  return [
+    "OpenBrief timestamp link contract:",
+    `- Use the custom markdown timestamp node as a normal Markdown link: [linked text](${summaryTimestampHrefPrefix}SECONDS).`,
+    "- SECONDS must be an integer from the transcript timestamp, not a formatted time string.",
+    "- Use it for section timestamp labels, high-signal sentences, and paragraph leads that users may want to replay.",
+    "- Do not use VIDEO_URL&t=SECONDS for in-app timestamp links.",
+  ].join("\n");
 }

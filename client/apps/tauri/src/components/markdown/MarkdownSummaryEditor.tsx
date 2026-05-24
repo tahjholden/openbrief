@@ -14,9 +14,10 @@ import {
   Redo2,
   Undo2,
 } from "lucide-react";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, type MouseEvent, type ReactNode } from "react";
 import { Button } from "@acme/ui/button";
 import { cn } from "@acme/ui";
+import { parseSummaryTimestampHref } from "@/domain/summary";
 
 type MarkdownSummaryEditorProps = {
   markdown: string;
@@ -25,6 +26,7 @@ type MarkdownSummaryEditorProps = {
   className?: string;
   toolbarActions?: ReactNode;
   onMarkdownChange?(markdown: string): void;
+  onTimestampClick?(seconds: number): void;
 };
 
 const markdownExtensions = [StarterKit, Markdown];
@@ -36,6 +38,7 @@ export function MarkdownSummaryEditor({
   className,
   toolbarActions,
   onMarkdownChange,
+  onTimestampClick,
 }: MarkdownSummaryEditorProps) {
   const markdownRef = useRef(markdown);
   const onMarkdownChangeRef = useRef(onMarkdownChange);
@@ -94,10 +97,34 @@ export function MarkdownSummaryEditor({
         />
       ) : null}
       <div className={cn("min-h-0 flex-1 px-3", editable && "pt-3")}>
-        <EditorContent editor={editor} />
+        <EditorContent
+          editor={editor}
+          onClickCapture={(event) =>
+            handleTimestampLinkClick(event, onTimestampClick)
+          }
+        />
       </div>
     </div>
   );
+}
+
+function handleTimestampLinkClick(
+  event: MouseEvent<HTMLDivElement>,
+  onTimestampClick: ((seconds: number) => void) | undefined,
+) {
+  if (!onTimestampClick) return;
+
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+
+  const link = target.closest("a");
+  if (!link || !event.currentTarget.contains(link)) return;
+
+  const seconds = parseSummaryTimestampHref(link.getAttribute("href"));
+  if (seconds === undefined) return;
+
+  event.preventDefault();
+  onTimestampClick(seconds);
 }
 
 function MarkdownEditorToolbar({

@@ -82,6 +82,14 @@
     @apply bg-transparent p-0;
   }
 
+  .openbrief-markdown-editor a {
+    @apply text-primary underline underline-offset-2;
+  }
+
+  .openbrief-markdown-editor a[href^="#openbrief-timestamp-"] {
+    @apply decoration-primary/60 cursor-pointer font-medium;
+  }
+
   .openbrief-chat-markdown {
     @apply text-sm leading-relaxed;
   }

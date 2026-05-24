@@ -1397,6 +1397,34 @@ describe("WorkbenchView", () => {
     expect(onPlayVideo).toHaveBeenCalledWith("video-1");
   });
 
+  it("seeks playback from summary timestamp links", async () => {
+    const onVideoTimeUpdate = vi.fn();
+    const onPlayVideo = vi.fn();
+
+    render(
+      <WorkbenchView
+        {...defaultProps({
+          summary: {
+            ...summaryFixture,
+            markdown:
+              "# Summary\n\n[Replay this summary sentence.](#openbrief-timestamp-30)",
+          },
+          onVideoTimeUpdate,
+          onPlayVideo,
+        })}
+      />,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("link", {
+        name: "Replay this summary sentence.",
+      }),
+    );
+
+    expect(onVideoTimeUpdate).toHaveBeenCalledWith("video-1", 30);
+    expect(onPlayVideo).toHaveBeenCalledWith("video-1");
+  });
+
   it("highlights the transcript segment that matches active playback time", () => {
     render(
       <WorkbenchView

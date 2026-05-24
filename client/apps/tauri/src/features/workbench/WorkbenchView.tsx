@@ -845,6 +845,13 @@ export function WorkbenchView({
     onVideoTimeUpdate(video.id, segment.startSeconds);
   }
 
+  function seekToSummaryTimestamp(seconds: number) {
+    if (!video || sourceType === "pdf") return;
+
+    onPlayVideo(video.id);
+    onVideoTimeUpdate(video.id, seconds);
+  }
+
   function startTranscriptEdit(segment: TranscriptSegment) {
     setEditingTranscriptSegmentId(segment.id);
   }
@@ -1332,6 +1339,7 @@ export function WorkbenchView({
                         onCommitMarkdown={onUpdateSummaryMarkdown}
                         saveLabel={t("workbench.summary.save")}
                         saveDisabled={isSummarizing}
+                        onTimestampClick={seekToSummaryTimestamp}
                         onSaveMarkdown={
                           activeSummary
                             ? () => onSaveMarkdown(activeSummary.id)
@@ -2279,6 +2287,7 @@ function SummaryMarkdownPanel({
   onCommitMarkdown,
   saveLabel,
   saveDisabled = false,
+  onTimestampClick,
   onSaveMarkdown,
 }: {
   summaryId?: string;
@@ -2288,6 +2297,7 @@ function SummaryMarkdownPanel({
   onCommitMarkdown?(summaryId: string, markdown: string): void;
   saveLabel: string;
   saveDisabled?: boolean;
+  onTimestampClick?(seconds: number): void;
   onSaveMarkdown?(): void;
 }) {
   const [draftMarkdown, setDraftMarkdown] = useState(markdown);
@@ -2370,6 +2380,7 @@ function SummaryMarkdownPanel({
           ) : undefined
         }
         onMarkdownChange={setDraftMarkdown}
+        onTimestampClick={onTimestampClick}
       />
     </div>
   );
