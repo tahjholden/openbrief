@@ -2,7 +2,11 @@ import { execFileSync } from "node:child_process";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { getHostTriple, sidecarFileName } from "./setup-dev-sidecars.js";
+import {
+  createDevSidecarPlaceholder,
+  getHostTriple,
+  sidecarFileName,
+} from "./setup-dev-sidecars.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -38,6 +42,24 @@ export function buildFluidAudioSidecar({
   packageDir = swiftPackageDir,
 } = {}) {
   if (targetTriple !== SUPPORTED_FLUIDAUDIO_TARGET_TRIPLE) {
+    if (targetTriple.endsWith("apple-darwin")) {
+      const placeholder = createDevSidecarPlaceholder({
+        binariesDir,
+        baseName: "openbrief-fluidaudio",
+        targetTriple,
+        message:
+          "OpenBrief FluidAudio sidecar is only available on macOS Apple Silicon.",
+      });
+      return {
+        skipped: true,
+        reason: `FluidAudio sidecar is only built for ${SUPPORTED_FLUIDAUDIO_TARGET_TRIPLE}`,
+        targetTriple,
+        destinationName: placeholder.fileName,
+        destinationPath: placeholder.filePath,
+        placeholder: true,
+      };
+    }
+
     return {
       skipped: true,
       reason: `FluidAudio sidecar is only built for ${SUPPORTED_FLUIDAUDIO_TARGET_TRIPLE}`,

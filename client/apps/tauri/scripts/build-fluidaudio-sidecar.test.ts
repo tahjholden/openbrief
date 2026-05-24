@@ -25,9 +25,29 @@ describe("FluidAudio sidecar build script", () => {
     expect(() => targetTripleFromArgs(["--target"])).toThrow(/requires/);
   });
 
-  it("skips FluidAudio for macOS Intel, Windows, and Linux targets", () => {
+  it("creates an unsupported placeholder for macOS Intel packaging", () => {
+    const binariesDir = mkdtempSync(join(tmpdir(), "openbrief-fluidaudio-skip-"));
+    const result = buildFluidAudioSidecar({
+      binariesDir,
+      targetTriple: "x86_64-apple-darwin",
+      execFile: () => {
+        throw new Error("swift should not run for macOS Intel");
+      },
+    });
+
+    expect(result).toMatchObject({
+      skipped: true,
+      targetTriple: "x86_64-apple-darwin",
+      destinationName: "openbrief-fluidaudio-x86_64-apple-darwin",
+      placeholder: true,
+    });
+    expect(
+      existsSync(join(binariesDir, "openbrief-fluidaudio-x86_64-apple-darwin")),
+    ).toBe(true);
+  });
+
+  it("skips FluidAudio for Windows and Linux targets", () => {
     const unsupportedTargets = [
-      "x86_64-apple-darwin",
       "x86_64-pc-windows-msvc",
       "x86_64-unknown-linux-gnu",
       "aarch64-unknown-linux-gnu",
