@@ -1078,44 +1078,57 @@ export function WorkbenchView({
               }
             />
           </CardTitle>
-          <div className="flex flex-wrap gap-2">
-            <SummaryGenerateDialog
-              open={isSummaryGenerateDialogOpen}
-              templateId={summaryTemplateId}
-              lengthMode={summaryLengthMode}
-              languageCode={summaryLanguage.code}
-              isGenerating={isSummarizing}
-              disabled={renderedTranscript.length === 0}
-              onOpenChange={setIsSummaryGenerateDialogOpen}
-              onTemplateChange={setSummaryTemplateId}
-              onLengthChange={setSummaryLengthMode}
-              onLanguageChange={setSummaryLanguage}
-              onGenerate={generateSummary}
-            />
-            <PodcastGenerateDialog
-              open={isPodcastGenerateDialogOpen}
-              podcastHistoryCount={podcastHistory.length}
-              settings={podcastSettings}
-              sourceKind={podcastSourceKind}
-              canGenerate={Boolean(onGeneratePodcast && video)}
-              hasSummary={Boolean(activeSummary)}
-              hasTranscript={transcript.length > 0}
-              isGenerating={isGeneratingPodcast}
-              onOpenChange={setIsPodcastGenerateDialogOpen}
-              onSettingsChange={setPodcastSettings}
-              onSourceKindChange={setPodcastSourceKind}
-              onGenerate={submitPodcastGeneration}
-            />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <SummaryGenerateDialog
+                open={isSummaryGenerateDialogOpen}
+                templateId={summaryTemplateId}
+                lengthMode={summaryLengthMode}
+                languageCode={summaryLanguage.code}
+                isGenerating={isSummarizing}
+                disabled={renderedTranscript.length === 0}
+                onOpenChange={setIsSummaryGenerateDialogOpen}
+                onTemplateChange={setSummaryTemplateId}
+                onLengthChange={setSummaryLengthMode}
+                onLanguageChange={setSummaryLanguage}
+                onGenerate={generateSummary}
+              />
+              <PodcastGenerateDialog
+                open={isPodcastGenerateDialogOpen}
+                podcastHistoryCount={podcastHistory.length}
+                settings={podcastSettings}
+                sourceKind={podcastSourceKind}
+                canGenerate={Boolean(onGeneratePodcast && video)}
+                hasSummary={Boolean(activeSummary)}
+                hasTranscript={transcript.length > 0}
+                isGenerating={isGeneratingPodcast}
+                onOpenChange={setIsPodcastGenerateDialogOpen}
+                onSettingsChange={setPodcastSettings}
+                onSourceKindChange={setPodcastSourceKind}
+                onGenerate={submitPodcastGeneration}
+              />
+            </div>
             {activeSummary ? (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={isSummarizing}
-                onClick={() => onSaveMarkdown(activeSummary.id)}
-              >
-                <Download className="mr-2 h-4 w-4" aria-hidden="true" />
-                {t("workbench.summary.save")}
-              </Button>
+              <TooltipProvider delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10"
+                      disabled={isSummarizing}
+                      aria-label={t("workbench.summary.save")}
+                      onClick={() => onSaveMarkdown(activeSummary.id)}
+                    >
+                      <Download className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    {t("workbench.summary.save")}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             ) : null}
           </div>
         </CardHeader>

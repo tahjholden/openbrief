@@ -20,6 +20,7 @@ OpenBrief is a Tauri v2 desktop app with a React/TypeScript renderer and a Rust 
 - Keep side effects in `tauri/src/services`, `tauri/src/hooks`, or Rust commands.
 - Keep feature UI under `tauri/src/features`; share reusable controls through `tauri/src/components`.
 - Prefer shadcn UI components and accessible controls for renderer UI.
+- Primary app pages should use the available content width. Do not center page roots with narrow `max-w-*` wrappers unless the view is explicitly a reading/help/onboarding surface, dialog, or other intentionally constrained content.
 - User-visible renderer strings should go through i18n.
 - Rust owns authority for credentials, filesystem paths, sidecar execution, provider secret resolution, and app-library roots.
 - Renderer code must not receive raw provider secrets or authority-bearing filesystem roots.
