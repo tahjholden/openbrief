@@ -733,6 +733,17 @@ export function WorkbenchView({
     }
   }
 
+  function keepPodcastAudioPlaying(audio: HTMLAudioElement) {
+    if (audio.ended) return;
+
+    try {
+      const playResult = audio.play();
+      void playResult?.catch(() => setIsPodcastAudioPlaying(false));
+    } catch {
+      setIsPodcastAudioPlaying(false);
+    }
+  }
+
   function handlePodcastAudioPlay(currentPodcast: PodcastDocument) {
     podcastAudioSeekingRef.current = false;
     podcastAudioWasPlayingBeforeSeekRef.current = false;
@@ -740,11 +751,15 @@ export function WorkbenchView({
     onPauseVideo(currentPodcast.sourceAssetId);
   }
 
-  function handlePodcastAudioPause() {
+  function handlePodcastAudioPause(
+    event: SyntheticEvent<HTMLAudioElement>,
+  ) {
     if (
       podcastAudioSeekingRef.current &&
       podcastAudioWasPlayingBeforeSeekRef.current
     ) {
+      setIsPodcastAudioPlaying(true);
+      keepPodcastAudioPlaying(event.currentTarget);
       return;
     }
 
@@ -771,9 +786,14 @@ export function WorkbenchView({
     podcastAudioSeekingRef.current = false;
     podcastAudioWasPlayingBeforeSeekRef.current = false;
 
+    if (wasPlayingBeforeSeek) {
+      setIsPodcastAudioPlaying(true);
+      keepPodcastAudioPlaying(event.currentTarget);
+      return;
+    }
+
     setIsPodcastAudioPlaying(
-      wasPlayingBeforeSeek ||
-        (!event.currentTarget.paused && !event.currentTarget.ended),
+      !event.currentTarget.paused && !event.currentTarget.ended,
     );
   }
 
@@ -1748,7 +1768,7 @@ function PodcastBriefPanel({
   audioRef: RefObject<HTMLAudioElement | null>;
   generateAction: ReactNode;
   onAudioPlay?(): void;
-  onAudioPause?(): void;
+  onAudioPause?(event: SyntheticEvent<HTMLAudioElement>): void;
   onAudioSeeking?(event: SyntheticEvent<HTMLAudioElement>): void;
   onAudioSeeked?(event: SyntheticEvent<HTMLAudioElement>): void;
   onAudioEnded?(): void;

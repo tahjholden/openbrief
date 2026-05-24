@@ -126,8 +126,10 @@ describe("WorkbenchView", () => {
     fireEvent.seeking(audio);
     fireEvent.pause(audio);
     expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
+    expect(audioPlay).toHaveBeenCalledTimes(2);
     fireEvent.seeked(audio);
     expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
+    expect(audioPlay).toHaveBeenCalledTimes(3);
 
     fireEvent.click(screen.getByRole("button", { name: "Pause" }));
     expect(audioPause).toHaveBeenCalledTimes(1);
