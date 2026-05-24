@@ -50,7 +50,7 @@
     "active": true,
     "targets": "all",
     "createUpdaterArtifacts": true,
-    "externalBin": ["binaries/openbrief-helper"],
+    "externalBin": ["binaries/openbrief-helper", "binaries/openbrief-supertonic"],
     "macOS": {
       "signingIdentity": "-",
       "hardenedRuntime": false,

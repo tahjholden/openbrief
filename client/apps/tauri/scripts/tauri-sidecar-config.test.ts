@@ -10,7 +10,10 @@ describe("Tauri sidecar configuration", () => {
   it("keeps FluidAudio out of the default cross-platform sidecar list", () => {
     const config = readJson(join(process.cwd(), "src-tauri", "tauri.conf.json"));
 
-    expect(config.bundle.externalBin).toEqual(["binaries/openbrief-helper"]);
+    expect(config.bundle.externalBin).toEqual([
+      "binaries/openbrief-helper",
+      "binaries/openbrief-supertonic",
+    ]);
     expect(config.bundle.externalBin).not.toContain("binaries/openbrief-fluidaudio");
   });
 
@@ -21,6 +24,7 @@ describe("Tauri sidecar configuration", () => {
 
     expect(macosConfig.bundle.externalBin).toEqual([
       "binaries/openbrief-helper",
+      "binaries/openbrief-supertonic",
       "binaries/openbrief-fluidaudio",
     ]);
   });

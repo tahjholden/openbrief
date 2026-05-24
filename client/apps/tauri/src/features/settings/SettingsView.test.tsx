@@ -5,6 +5,7 @@ import { createPlatformCompatibilityReport } from "@/domain/compatibility";
 import type { SettingsSnapshot } from "@/domain/settings";
 import { defaultAiProviderPreferences } from "@/services/aiProviderPreferencesService";
 import { defaultSystemPromptSettings } from "@/services/systemPromptSettingsService";
+import { defaultTtsSettings } from "@/services/ttsSettingsService";
 
 const settings: SettingsSnapshot = {
   versionInfo: {
@@ -147,6 +148,7 @@ describe("SettingsView", () => {
     expect(screen.getByText("Compatibility")).toBeInTheDocument();
     expect(screen.getByText("Video Download")).toBeInTheDocument();
     expect(screen.getByText("STT")).toBeInTheDocument();
+    expect(screen.getByText("TTS")).toBeInTheDocument();
     expect(screen.getByText("AI Providers")).toBeInTheDocument();
     expect(screen.getByText("System Prompts")).toBeInTheDocument();
     expect(screen.getAllByText("Loading settings...").length).toBeGreaterThan(0);
@@ -160,6 +162,7 @@ describe("SettingsView", () => {
     expect(screen.getByText("Compatibility")).toBeInTheDocument();
     expect(screen.getByText("Video Download")).toBeInTheDocument();
     expect(screen.getByText("STT")).toBeInTheDocument();
+    expect(screen.getByText("TTS")).toBeInTheDocument();
     expect(screen.getByText("AI Providers")).toBeInTheDocument();
     expect(screen.getByText("OpenBrief 0.1.0")).toBeInTheDocument();
     expect(screen.queryByText("2.11.2")).not.toBeInTheDocument();
@@ -179,6 +182,9 @@ describe("SettingsView", () => {
     expect(screen.getByText("Whisper Small")).toBeInTheDocument();
     expect(screen.getByText("Advanced models")).toBeInTheDocument();
     expect(screen.getAllByText("not downloaded").length).toBeGreaterThan(0);
+    expect(screen.getByText("Supertone/supertonic-3")).toBeInTheDocument();
+    expect(screen.getAllByText("English (en)").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("M1 preset").length).toBeGreaterThan(0);
     expect(screen.getAllByText("OpenAI").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Claude").length).toBeGreaterThan(0);
     expect(screen.getAllByText("configured").length).toBeGreaterThan(0);
@@ -322,6 +328,50 @@ describe("SettingsView", () => {
         model: "gemini-3.1-flash-lite",
         streamingMode: false,
       },
+    });
+  });
+
+  it("changes the default TTS voice from settings", () => {
+    const onTtsSettingsChange = vi.fn();
+
+    render(
+      <SettingsView
+        settings={settings}
+        ttsSettings={defaultTtsSettings}
+        onTtsSettingsChange={onTtsSettingsChange}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Voice"), {
+      target: { value: "F2" },
+    });
+
+    expect(onTtsSettingsChange).toHaveBeenCalledWith({
+      ...defaultTtsSettings,
+      voiceStyleId: "F2",
+      hasSelectedVoice: true,
+    });
+  });
+
+  it("changes the default TTS language from settings", () => {
+    const onTtsSettingsChange = vi.fn();
+
+    render(
+      <SettingsView
+        settings={settings}
+        ttsSettings={defaultTtsSettings}
+        onTtsSettingsChange={onTtsSettingsChange}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Speech language"), {
+      target: { value: "ko" },
+    });
+
+    expect(onTtsSettingsChange).toHaveBeenCalledWith({
+      ...defaultTtsSettings,
+      languageCode: "ko",
+      hasSelectedVoice: true,
     });
   });
 

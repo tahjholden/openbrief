@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   isLanguageSupportedByModel,
+  isSynthesisLanguageSupportedByModel,
   localSttModelCardForModel,
+  localTtsModelCardForModel,
   parakeetV3Languages,
+  supertonic3Languages,
+  synthesisLanguagesForModel,
   transcriptionLanguagesForModel,
   whisperLanguages,
 } from "./index";
@@ -51,6 +55,38 @@ describe("local STT model cards", () => {
     );
     expect(localSttModelCardForModel("whisper-small").engine).toBe(
       "whisper.cpp",
+    );
+  });
+});
+
+describe("local TTS model cards", () => {
+  it("lists Supertonic 3 synthesis languages", () => {
+    const codes = synthesisLanguagesForModel("Supertone/supertonic-3").map(
+      (language) => language.code,
+    );
+
+    expect(codes).toContain("en");
+    expect(codes).toContain("ko");
+    expect(codes).toContain("ja");
+    expect(codes).toContain("ar");
+    expect(codes).toContain("vi");
+    expect(codes).not.toContain("auto");
+    expect(codes).not.toContain("zh");
+    expect(supertonic3Languages).toHaveLength(31);
+  });
+
+  it("checks whether Supertonic 3 supports a synthesis language", () => {
+    expect(
+      isSynthesisLanguageSupportedByModel("Supertone/supertonic-3", "en"),
+    ).toBe(true);
+    expect(
+      isSynthesisLanguageSupportedByModel("Supertone/supertonic-3", "zh"),
+    ).toBe(false);
+  });
+
+  it("resolves Supertonic 3 to the reusable TTS model card", () => {
+    expect(localTtsModelCardForModel("Supertone/supertonic-3").engine).toBe(
+      "supertonic",
     );
   });
 });

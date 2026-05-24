@@ -1,0 +1,172 @@
+name: Supertonic Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "Platform to test"
+        required: true
+        type: choice
+        default: "all"
+        options:
+          - all
+          - macos-arm64
+          - macos-intel
+          - windows-x64
+          - linux-x64
+      model:
+        description: "Supertonic model or Hugging Face repo ID"
+        required: true
+        type: string
+        default: "Supertone/supertonic-2"
+      text:
+        description: "Text to synthesize"
+        required: true
+        type: string
+        default: "Welcome to OpenBrief"
+
+permissions:
+  contents: read
+
+jobs:
+  select-platforms:
+    name: Select platforms
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Build matrix
+        id: matrix
+        shell: bash
+        run: |
+          macos_arm64='{"name":"macos-arm64","os":"macos-latest"}'
+          macos_intel='{"name":"macos-intel","os":"macos-15-intel"}'
+          windows_x64='{"name":"windows-x64","os":"windows-latest"}'
+          linux_x64='{"name":"linux-x64","os":"ubuntu-22.04"}'
+
+          case "${{ inputs.platform }}" in
+            all)
+              matrix="{\"include\":[${macos_arm64},${macos_intel},${windows_x64},${linux_x64}]}"
+              ;;
+            macos-arm64)
+              matrix="{\"include\":[${macos_arm64}]}"
+              ;;
+            macos-intel)
+              matrix="{\"include\":[${macos_intel}]}"
+              ;;
+            windows-x64)
+              matrix="{\"include\":[${windows_x64}]}"
+              ;;
+            linux-x64)
+              matrix="{\"include\":[${linux_x64}]}"
+              ;;
+            *)
+              echo "Unsupported platform: ${{ inputs.platform }}" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
+
+  smoke:
+    name: Supertonic ${{ matrix.name }}
+    needs: select-platforms
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.select-platforms.outputs.matrix) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux audio runtime dependency
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsndfile1
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: client/apps/tauri/src-tauri/sidecars/supertonic-python/pyproject.toml
+
+      - name: Install OpenBrief Supertonic CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -e 'client/apps/tauri/src-tauri/sidecars/supertonic-python[read]'
+          openbrief --help
+          openbrief read --help
+
+      - name: Generate speech
+        shell: bash
+        env:
+          OPENBRIEF_SUPERTONIC_MODEL: ${{ inputs.model }}
+          OPENBRIEF_SUPERTONIC_TEXT: ${{ inputs.text }}
+        run: |
+          set -euo pipefail
+          mkdir -p smoke-output
+          out="smoke-output/openbrief-supertonic-${{ matrix.name }}.wav"
+          cache="smoke-output/cache"
+          result="smoke-output/openbrief-supertonic-${{ matrix.name }}.json"
+
+          openbrief read \
+            --model "$OPENBRIEF_SUPERTONIC_MODEL" \
+            --cache-dir "$cache" \
+            --language en \
+            --voice-style M1 \
+            --total-steps 5 \
+            --output "$out" \
+            "$OPENBRIEF_SUPERTONIC_TEXT" | tee "$result"
+
+          python - <<'PY' "$result" "$out"
+          import json
+          import os
+          import sys
+          import wave
+          from pathlib import Path
+
+          result_path = Path(sys.argv[1])
+          audio_path = Path(sys.argv[2])
+          result = json.loads(result_path.read_text())
+          expected_model = os.environ["OPENBRIEF_SUPERTONIC_MODEL"].strip().lower()
+          expected_repo = {
+              "supertonic": "Supertone/supertonic",
+              "supertonic-2": "Supertone/supertonic-2",
+              "supertonic-3": "Supertone/supertonic-3",
+              "supertone/supertonic": "Supertone/supertonic",
+              "supertone/supertonic-2": "Supertone/supertonic-2",
+              "supertone/supertonic-3": "Supertone/supertonic-3",
+          }[expected_model]
+
+          if result["modelRepo"] != expected_repo:
+              raise SystemExit(f"unexpected modelRepo: {result['modelRepo']}")
+          if result["sampleRate"] != 44100:
+              raise SystemExit(f"unexpected sampleRate: {result['sampleRate']}")
+          if not audio_path.is_file() or audio_path.stat().st_size <= 44:
+              raise SystemExit("missing or empty wav output")
+
+          with wave.open(str(audio_path), "rb") as wav:
+              if wav.getframerate() != 44100:
+                  raise SystemExit(f"unexpected wav framerate: {wav.getframerate()}")
+              frames = wav.getnframes()
+              if frames <= 0:
+                  raise SystemExit("wav has no frames")
+
+          print(json.dumps({"wavBytes": audio_path.stat().st_size, "frames": frames}))
+          PY
+
+      - name: Upload smoke artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: supertonic-smoke-${{ matrix.name }}
+          path: |
+            smoke-output/openbrief-supertonic-${{ matrix.name }}.wav
+            smoke-output/openbrief-supertonic-${{ matrix.name }}.json
+          if-no-files-found: error

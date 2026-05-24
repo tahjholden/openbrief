@@ -4,6 +4,7 @@ import { TauriHelperClient, type TauriInvoke } from "@/services/tauriHelperClien
 import {
   createLocalFileDialogService,
   type LocalFileDialogService,
+  type SaveFileDialogRequest,
 } from "@/services/localFileDialogService";
 import {
   createTranscriptArtifactPath,
@@ -53,6 +54,12 @@ export type ArtifactExportService = {
     summary?: SummaryDocument;
     kind: VideoArtifactDownloadKind;
   }): Promise<ArtifactExportResult | undefined>;
+  exportLibraryArtifact(request: {
+    sourceRelativePath: string;
+    defaultFileName: string;
+    label: string;
+    filters?: SaveFileDialogRequest["filters"];
+  }): Promise<ArtifactExportResult | undefined>;
 };
 
 export function createArtifactExportService({
@@ -65,6 +72,60 @@ export function createArtifactExportService({
   fileDialogService?: LocalFileDialogService;
 } = {}): ArtifactExportService {
   return {
+    async exportLibraryArtifact({
+      sourceRelativePath,
+      defaultFileName,
+      label,
+      filters,
+    }) {
+      const targetPath = await fileDialogService.selectSavePath({
+        title: `Export ${label}`,
+        defaultPath: defaultFileName,
+        filters,
+      });
+
+      if (!targetPath) {
+        return undefined;
+      }
+
+      const { outputDirectory, fileName } = splitExportTargetPath(targetPath);
+      logRuntimeInfo("before exporting artifact", {
+        kind: label,
+        sourceRelativePath,
+        outputDirectory,
+        fileName,
+      });
+
+      try {
+        const result = await invokeCommand<ArtifactExportResult>(
+          "export_library_artifact",
+          {
+            sourceRelativePath,
+            outputDirectory,
+            fileName,
+          },
+        );
+        logRuntimeInfo("after exporting artifact", {
+          kind: label,
+          status: "success",
+          sourceRelativePath,
+          targetPath: result.targetPath,
+          bytesWritten: result.bytesWritten,
+        });
+        return result;
+      } catch (error) {
+        logRuntimeError("after exporting artifact", {
+          kind: label,
+          status: "failed",
+          sourceRelativePath,
+          outputDirectory,
+          fileName,
+          error: caughtErrorMessage(error, "artifact_export_failed"),
+        });
+        throw error;
+      }
+    },
+
     async exportVideoArtifact({ video, transcript, summary, kind }) {
       if (kind === "transcription" && (!transcript || transcript.length === 0)) {
         throw new Error("transcription_export_unavailable");

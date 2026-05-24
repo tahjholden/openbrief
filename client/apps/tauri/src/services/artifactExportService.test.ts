@@ -5,6 +5,42 @@ import type { TauriInvoke } from "@/services/tauriHelperClient";
 import type { VideoAsset } from "@/domain/media-library";
 
 describe("artifactExportService", () => {
+  it("exports an arbitrary library artifact to the selected save path", async () => {
+    const invokeCommand = vi.fn().mockResolvedValue({
+      targetPath: "/exports/chat-1-voice.wav",
+      sourceRelativePath: "videos/video-1/chat/tts/chat-1/tts-1/audio.wav",
+      bytesWritten: 12,
+    });
+    const fileDialogService = {
+      selectVideoFile: vi.fn(),
+      selectImageFile: vi.fn(),
+      selectSavePath: vi.fn().mockResolvedValue("/exports/chat-1-voice.wav"),
+    };
+    const service = createArtifactExportService({
+      invokeCommand,
+      helperClient: new FakeHelperClient(),
+      fileDialogService,
+    });
+
+    await service.exportLibraryArtifact({
+      sourceRelativePath: "videos/video-1/chat/tts/chat-1/tts-1/audio.wav",
+      defaultFileName: "chat-1-voice.wav",
+      label: "voice message",
+      filters: [{ name: "Audio", extensions: ["wav"] }],
+    });
+
+    expect(fileDialogService.selectSavePath).toHaveBeenCalledWith({
+      title: "Export voice message",
+      defaultPath: "chat-1-voice.wav",
+      filters: [{ name: "Audio", extensions: ["wav"] }],
+    });
+    expect(invokeCommand).toHaveBeenCalledWith("export_library_artifact", {
+      sourceRelativePath: "videos/video-1/chat/tts/chat-1/tts-1/audio.wav",
+      outputDirectory: "/exports",
+      fileName: "chat-1-voice.wav",
+    });
+  });
+
   it("asks for an editable save path before exporting a video artifact", async () => {
     const invokeCommand = vi.fn().mockResolvedValue({
       targetPath: "/exports/source.mp4",

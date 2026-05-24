@@ -115,6 +115,15 @@ export interface LocalSttModelCard {
   supportedLanguages: readonly TranscriptionLanguage[];
 }
 
+export type LocalTtsEngine = "supertonic";
+
+export interface LocalTtsModelCard {
+  id: string;
+  name: string;
+  engine: LocalTtsEngine;
+  supportedLanguages: readonly TranscriptionLanguage[];
+}
+
 const autoLanguage = {
   code: "auto",
   label: "Auto-detect",
@@ -251,6 +260,43 @@ export const whisperLanguages = [
   { code: "yue", label: "Cantonese" },
 ] as const satisfies readonly TranscriptionLanguage[];
 
+export const supertonic3Languages = [
+  { code: "en", label: "English" },
+  { code: "ko", label: "Korean" },
+  { code: "ja", label: "Japanese" },
+  { code: "ar", label: "Arabic" },
+  { code: "bg", label: "Bulgarian" },
+  { code: "cs", label: "Czech" },
+  { code: "da", label: "Danish" },
+  { code: "de", label: "German" },
+  { code: "el", label: "Greek" },
+  { code: "es", label: "Spanish" },
+  { code: "et", label: "Estonian" },
+  { code: "fi", label: "Finnish" },
+  { code: "fr", label: "French" },
+  { code: "hi", label: "Hindi" },
+  { code: "hr", label: "Croatian" },
+  { code: "hu", label: "Hungarian" },
+  { code: "id", label: "Indonesian" },
+  { code: "it", label: "Italian" },
+  { code: "lt", label: "Lithuanian" },
+  { code: "lv", label: "Latvian" },
+  { code: "nl", label: "Dutch" },
+  { code: "pl", label: "Polish" },
+  { code: "pt", label: "Portuguese" },
+  { code: "ro", label: "Romanian" },
+  { code: "ru", label: "Russian" },
+  { code: "sk", label: "Slovak" },
+  { code: "sl", label: "Slovenian" },
+  { code: "sv", label: "Swedish" },
+  { code: "tr", label: "Turkish" },
+  { code: "uk", label: "Ukrainian" },
+  { code: "vi", label: "Vietnamese" },
+] as const satisfies readonly TranscriptionLanguage[];
+
+export type Supertonic3LanguageCode =
+  (typeof supertonic3Languages)[number]["code"];
+
 const whisperModelIds = new Set([
   "whisper-tiny",
   "whisper-base",
@@ -278,6 +324,17 @@ export const localSttModelCards = [
 const parakeetV3ModelCard = localSttModelCards[0];
 const whisperModelCard = localSttModelCards[1];
 
+export const localTtsModelCards = [
+  {
+    id: "Supertone/supertonic-3",
+    name: "Supertonic 3",
+    engine: "supertonic",
+    supportedLanguages: supertonic3Languages,
+  },
+] as const satisfies readonly LocalTtsModelCard[];
+
+const supertonic3ModelCard = localTtsModelCards[0];
+
 export function localSttModelCardForModel(modelId?: string): LocalSttModelCard {
   if (modelId === parakeetV3ModelCard.id) return parakeetV3ModelCard;
   if (!modelId || whisperModelIds.has(modelId)) return whisperModelCard;
@@ -297,6 +354,26 @@ export function isLanguageSupportedByModel(
 ) {
   if (languageCode === "auto") return true;
   return transcriptionLanguagesForModel(modelId).some(
+    (language) => language.code === languageCode,
+  );
+}
+
+export function localTtsModelCardForModel(modelId?: string): LocalTtsModelCard {
+  if (!modelId || modelId === supertonic3ModelCard.id) {
+    return supertonic3ModelCard;
+  }
+  return supertonic3ModelCard;
+}
+
+export function synthesisLanguagesForModel(modelId?: string) {
+  return [...localTtsModelCardForModel(modelId).supportedLanguages] as const;
+}
+
+export function isSynthesisLanguageSupportedByModel(
+  modelId: string | undefined,
+  languageCode: string,
+) {
+  return synthesisLanguagesForModel(modelId).some(
     (language) => language.code === languageCode,
   );
 }

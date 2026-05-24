@@ -1162,6 +1162,103 @@ describe("WorkbenchView", () => {
     expect(onResetChat).toHaveBeenCalledTimes(1);
   });
 
+  it("passes rendered chat text to read message", () => {
+    const onReadChatMessage = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <WorkbenchView
+        {...defaultProps({
+          chatMessages: [
+            {
+              ...chatFixture[0],
+              content: "**Answer** from transcript\n\n- Key point",
+            },
+          ],
+          onReadChatMessage,
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Read message" }));
+
+    expect(onReadChatMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "chat-1" }),
+      "Answer from transcript Key point",
+    );
+  });
+
+  it("shows a download action when generated chat speech exists", () => {
+    const onDownloadChatTtsAudio = vi.fn();
+    const audio = {
+      audioPath: "videos/video-1/chat/tts/chat-1/tts-1/audio.wav",
+      generationId: "tts-1",
+      sizeBytes: 12,
+    };
+
+    render(
+      <WorkbenchView
+        {...defaultProps({
+          chatMessages: chatFixture,
+          chatTtsAudioByMessageId: { "chat-1": audio },
+          onDownloadChatTtsAudio,
+        })}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Download voice message" }),
+    );
+
+    expect(onDownloadChatTtsAudio).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "chat-1" }),
+      audio,
+    );
+  });
+
+  it("shows play, regenerate, and download actions when generated chat speech exists", () => {
+    const onPlayChatTtsAudio = vi.fn();
+    const onReadChatMessage = vi.fn().mockResolvedValue(undefined);
+    const onDownloadChatTtsAudio = vi.fn();
+    const audio = {
+      audioPath: "videos/video-1/chat/tts/chat-1/tts-1/audio.wav",
+      generationId: "tts-1",
+      sizeBytes: 12,
+    };
+
+    render(
+      <WorkbenchView
+        {...defaultProps({
+          chatMessages: chatFixture,
+          chatTtsAudioByMessageId: { "chat-1": audio },
+          onPlayChatTtsAudio,
+          onReadChatMessage,
+          onDownloadChatTtsAudio,
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Play voice message" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Regenerate voice message" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Download voice message" }),
+    );
+
+    expect(onPlayChatTtsAudio).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "chat-1" }),
+      audio,
+    );
+    expect(onReadChatMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "chat-1" }),
+      "Answer from transcript",
+    );
+    expect(onDownloadChatTtsAudio).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "chat-1" }),
+      audio,
+    );
+  });
+
   it("reveals older chat bubble actions only on hover or focus", () => {
     const olderMessage = {
       ...chatFixture[0],

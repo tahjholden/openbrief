@@ -2,6 +2,7 @@ import type { ChatContextMode } from "@/domain/chat";
 import type { DownloadRecoveryActionKind } from "@/domain/download-error";
 import type { CaptionLanguage } from "@/domain/helper-protocol";
 import type {
+  ChatMessage,
   IngestJob,
   MediaSourceType,
   ProviderKind,
@@ -26,8 +27,13 @@ import type {
   AiWorkflowProviderConfig,
 } from "@/services/aiProviderPreferencesService";
 import type { VideoArtifactDownloadKind } from "@/services/artifactExportService";
+import type { SupertonicChatTtsArtifact } from "@/services/supertonicService";
 import type { SystemPromptSettings } from "@/services/systemPromptSettingsService";
 import type { AppColorSeed, AppTheme } from "@/services/themeSettingsService";
+import type {
+  SupertonicVoiceStyleId,
+  TtsSettings,
+} from "@/services/ttsSettingsService";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppLayout } from "@/app/AppLayout";
 import { CopyDropdownMenuItem } from "@/components/CopyAction";
@@ -78,6 +84,11 @@ import {
 } from "@/services/settingsService";
 import { createSetupService, whisperModelPath } from "@/services/setupService";
 import {
+  findLatestChatBubbleSupertonicAudio,
+  readChatBubbleWithSupertonic,
+  resolveChatBubbleSupertonicAudioUrl,
+} from "@/services/supertonicService";
+import {
   loadSystemPromptSettings,
   resetSystemPromptSettings,
   saveSystemPromptSettings,
@@ -91,6 +102,11 @@ import {
   saveAppTheme,
 } from "@/services/themeSettingsService";
 import {
+  loadTtsSettings,
+  saveTtsSettings,
+  supertonicPresetVoiceStyles,
+} from "@/services/ttsSettingsService";
+import {
   createTranscriptOverlayPayload,
   showTranscriptOverlay,
   transcriptOverlayHiddenEvent,
@@ -100,7 +116,12 @@ import { listen } from "@tauri-apps/api/event";
 import { ExternalLink, Info, Loader2, Search } from "lucide-react";
 
 import type { TranscriptionLanguageCode } from "@acme/model-card";
-import { transcriptionLanguagesForModel } from "@acme/model-card";
+import type { Supertonic3LanguageCode } from "@acme/model-card";
+import {
+  isSynthesisLanguageSupportedByModel,
+  supertonic3Languages,
+  transcriptionLanguagesForModel,
+} from "@acme/model-card";
 import { cn } from "@acme/ui";
 import { Button } from "@acme/ui/button";
 import {
@@ -189,6 +210,17 @@ type CaptionLanguageDialogState = {
   whisperModelPath?: string;
 };
 
+type PendingTtsRead = {
+  video: VideoAsset;
+  message: ChatMessage;
+  renderedText: string;
+};
+
+type ChatTtsAudioByMessageId = Record<
+  string,
+  SupertonicChatTtsArtifact | undefined
+>;
+
 const onboardingStorageKey = "openbrief.onboarding-complete";
 const videoPlaybackMenuEvent = "openbrief://video-playback-command";
 
@@ -248,6 +280,7 @@ export function AppShell() {
     () => createArtifactExportService(),
     [],
   );
+  const chatTtsAudioRef = useRef<HTMLAudioElement | null>(null);
   const playlistCoverService = useMemo(() => createPlaylistCoverService(), []);
   const [selectedWhisperModelId, setSelectedWhisperModelId] = useState(
     "parakeet-tdt-0.6b-v3",
@@ -271,6 +304,17 @@ export function AppShell() {
   const [aiProviderPreferences, setAiProviderPreferences] = useState(() =>
     loadAiProviderPreferences(),
   );
+  const [ttsSettings, setTtsSettings] = useState(() => loadTtsSettings());
+  const [pendingTtsRead, setPendingTtsRead] = useState<
+    PendingTtsRead | undefined
+  >();
+  const [chatTtsAudioByMessageId, setChatTtsAudioByMessageId] =
+    useState<ChatTtsAudioByMessageId>({});
+  const [ttsVoiceDraft, setTtsVoiceDraft] = useState<SupertonicVoiceStyleId>(
+    () => ttsSettings.voiceStyleId,
+  );
+  const [ttsLanguageDraft, setTtsLanguageDraft] =
+    useState<Supertonic3LanguageCode>(() => ttsSettings.languageCode);
   const [appTheme, setAppTheme] = useState<AppTheme>(() => loadAppTheme());
   const [appColorSeed, setAppColorSeed] = useState<AppColorSeed>(() =>
     loadAppColorSeed(),
@@ -461,6 +505,42 @@ export function AppShell() {
   const activeTranscriptVariantId = selectedVideo
     ? (activeTranscriptVariantIdsByVideoId[selectedVideo.id] ?? "original")
     : "original";
+  const selectedChatTtsLookupKey = selectedChatMessages
+    .map((message) => message.id)
+    .join("\n");
+
+  useEffect(() => {
+    if (!selectedVideo || selectedChatMessages.length === 0) {
+      setChatTtsAudioByMessageId({});
+      return;
+    }
+
+    let disposed = false;
+    const video = selectedVideo;
+    const messages = selectedChatMessages;
+
+    void Promise.all(
+      messages.map(async (message) => {
+        try {
+          const artifact = await findLatestChatBubbleSupertonicAudio({
+            video,
+            message,
+          });
+          return [message.id, artifact] as const;
+        } catch {
+          return [message.id, undefined] as const;
+        }
+      }),
+    ).then((entries) => {
+      if (disposed) return;
+      setChatTtsAudioByMessageId(Object.fromEntries(entries));
+    });
+
+    return () => {
+      disposed = true;
+    };
+  }, [selectedChatTtsLookupKey, selectedVideo?.libraryPath]);
+
   const pageTitle = pageTitleForView(
     state.activeView,
     selectedVideo?.title,
@@ -1126,6 +1206,13 @@ export function AppShell() {
     setAiProviderPreferences(saveAiProviderPreferences(preferences));
   }
 
+  function saveTtsSettingsFromSettings(settings: TtsSettings) {
+    const saved = saveTtsSettings(settings);
+    setTtsSettings(saved);
+    setTtsVoiceDraft(saved.voiceStyleId);
+    setTtsLanguageDraft(saved.languageCode);
+  }
+
   function resetSystemPrompts() {
     const reset = resetSystemPromptSettings();
     setSystemPromptSettings(reset);
@@ -1205,6 +1292,150 @@ export function AppShell() {
         summary: summaryForExport,
       });
 
+      if (result) {
+        setAppNotice({
+          message: t("notice.artifactExport.success", {
+            path: result.targetPath,
+          }),
+          action: {
+            label: t("notice.open"),
+            onClick: async () => {
+              try {
+                await revealExportedFile(result.targetPath);
+                setAppNotice(undefined);
+              } catch (error) {
+                setAppNotice(
+                  t("notice.openLocation.failed", {
+                    message: caughtErrorMessage(error, "file_reveal_failed"),
+                  }),
+                );
+              }
+            },
+          },
+        });
+      }
+    } catch (error) {
+      setAppNotice(
+        t("notice.artifactExport.failed", {
+          message: caughtErrorMessage(error, "artifact_export_failed"),
+        }),
+      );
+    }
+  }
+
+  async function readChatMessageWithSupertonic(
+    message: ChatMessage,
+    renderedText: string,
+  ) {
+    if (!selectedVideo) return;
+
+    if (!ttsSettings.hasSelectedVoice) {
+      setTtsVoiceDraft(ttsSettings.voiceStyleId);
+      setTtsLanguageDraft(
+        preferredSupertonicLanguageCode(
+          selectedVideo.language,
+          ttsSettings.languageCode,
+        ),
+      );
+      setPendingTtsRead({ video: selectedVideo, message, renderedText });
+      return;
+    }
+
+    await generateAndPlayChatTts(
+      selectedVideo,
+      message,
+      renderedText,
+      ttsSettings.languageCode,
+      ttsSettings.voiceStyleId,
+    );
+  }
+
+  async function confirmTtsVoiceAndReadMessage() {
+    if (!pendingTtsRead) return;
+
+    const readRequest = pendingTtsRead;
+    setPendingTtsRead(undefined);
+
+    const saved = saveTtsSettings({
+      ...ttsSettings,
+      voiceStyleId: ttsVoiceDraft,
+      languageCode: ttsLanguageDraft,
+      hasSelectedVoice: true,
+    });
+    setTtsSettings(saved);
+
+    await generateAndPlayChatTts(
+      readRequest.video,
+      readRequest.message,
+      readRequest.renderedText,
+      saved.languageCode,
+      saved.voiceStyleId,
+    );
+  }
+
+  async function generateAndPlayChatTts(
+    video: VideoAsset,
+    message: ChatMessage,
+    renderedText: string,
+    languageCode: Supertonic3LanguageCode,
+    voiceStyleId: SupertonicVoiceStyleId,
+  ) {
+    try {
+      const result = await readChatBubbleWithSupertonic({
+        video,
+        message,
+        text: renderedText,
+        language: languageCode,
+        voiceStyleId,
+      });
+      setChatTtsAudioByMessageId((current) => ({
+        ...current,
+        [message.id]: {
+          audioPath: result.audioPath,
+          generationId: result.generationId,
+          sizeBytes: result.sizeBytes,
+        },
+      }));
+      chatTtsAudioRef.current?.pause();
+      const audio = new Audio(result.audioUrl);
+      chatTtsAudioRef.current = audio;
+      await audio.play();
+    } catch (error) {
+      setAppNotice(
+        t("notice.supertonic.failed", {
+          message: caughtErrorMessage(error, "supertonic_tts_failed"),
+        }),
+      );
+    }
+  }
+
+  async function playChatTtsAudio(audio: SupertonicChatTtsArtifact) {
+    try {
+      const audioUrl = await resolveChatBubbleSupertonicAudioUrl(audio);
+      chatTtsAudioRef.current?.pause();
+      const player = new Audio(audioUrl);
+      chatTtsAudioRef.current = player;
+      await player.play();
+    } catch (error) {
+      setAppNotice(
+        t("notice.supertonic.failed", {
+          message: caughtErrorMessage(error, "supertonic_tts_failed"),
+        }),
+      );
+    }
+  }
+
+  async function downloadChatTtsAudio(
+    message: ChatMessage,
+    audio: SupertonicChatTtsArtifact,
+  ) {
+    try {
+      const result = await artifactExportService.exportLibraryArtifact({
+        sourceRelativePath: audio.audioPath,
+        defaultFileName: `${message.id}-voice.wav`,
+        label: "voice message",
+        filters: [{ name: "Audio", extensions: ["wav"] }],
+      });
       if (result) {
         setAppNotice({
           message: t("notice.artifactExport.success", {
@@ -1597,6 +1828,10 @@ export function AppShell() {
                 })
               : Promise.resolve([])
           }
+          onReadChatMessage={readChatMessageWithSupertonic}
+          chatTtsAudioByMessageId={chatTtsAudioByMessageId}
+          onPlayChatTtsAudio={(_, audio) => playChatTtsAudio(audio)}
+          onDownloadChatTtsAudio={downloadChatTtsAudio}
           onResetChat={() => {
             if (selectedVideo) resetChatSession(selectedVideo.id);
           }}
@@ -1681,6 +1916,8 @@ export function AppShell() {
           onColorSeedChange={changeAppColorSeed}
           aiProviderPreferences={aiProviderPreferences}
           onAiProviderPreferencesChange={saveAiProviderPreferencesFromSettings}
+          ttsSettings={ttsSettings}
+          onTtsSettingsChange={saveTtsSettingsFromSettings}
           systemPromptSettings={systemPromptSettings}
           onSaveSystemPrompts={saveSystemPrompts}
           onResetSystemPrompts={resetSystemPrompts}
@@ -1778,6 +2015,77 @@ export function AppShell() {
           onClose={stopVideo}
         />
       ) : null}
+      <Dialog
+        open={Boolean(pendingTtsRead)}
+        onOpenChange={(open) => {
+          if (!open) setPendingTtsRead(undefined);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("settings.tts.firstRunTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("settings.tts.firstRunDescription")}
+            </DialogDescription>
+          </DialogHeader>
+          <label className="grid gap-2 text-sm" htmlFor="first-read-tts-voice">
+            <span className="font-medium">{t("settings.tts.voice")}</span>
+            <select
+              id="first-read-tts-voice"
+              value={ttsVoiceDraft}
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              onChange={(event) =>
+                setTtsVoiceDraft(event.target.value as SupertonicVoiceStyleId)
+              }
+            >
+              {supertonicPresetVoiceStyles.map((voice) => (
+                <option key={voice.id} value={voice.id}>
+                  {t("settings.tts.voicePreset", { voice: voice.id })}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label
+            className="grid gap-2 text-sm"
+            htmlFor="first-read-tts-language"
+          >
+            <span className="font-medium">{t("settings.tts.language")}</span>
+            <select
+              id="first-read-tts-language"
+              value={ttsLanguageDraft}
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              onChange={(event) =>
+                setTtsLanguageDraft(
+                  event.target.value as Supertonic3LanguageCode,
+                )
+              }
+            >
+              {supertonic3Languages.map((language) => (
+                <option key={language.code} value={language.code}>
+                  {supertonicLanguageLabel(language.code)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPendingTtsRead(undefined)}
+            >
+              {t("settings.tts.cancel")}
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                void confirmTtsVoiceAndReadMessage();
+              }}
+            >
+              {t("settings.tts.confirm")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <CaptionLanguageDialog
         open={Boolean(captionLanguageDialog)}
         languages={captionLanguageDialog?.languages ?? []}
@@ -1868,6 +2176,26 @@ export function AppShell() {
       />
     </AppLayout>
   );
+}
+
+function preferredSupertonicLanguageCode(
+  videoLanguageCode: string | undefined,
+  fallbackLanguageCode: Supertonic3LanguageCode,
+) {
+  return videoLanguageCode &&
+    isSynthesisLanguageSupportedByModel(
+      "Supertone/supertonic-3",
+      videoLanguageCode,
+    )
+    ? (videoLanguageCode as Supertonic3LanguageCode)
+    : fallbackLanguageCode;
+}
+
+function supertonicLanguageLabel(languageCode: Supertonic3LanguageCode) {
+  const language = supertonic3Languages.find(
+    (candidate) => candidate.code === languageCode,
+  );
+  return language ? `${language.label} (${language.code})` : languageCode;
 }
 
 function pageTitleForView(

@@ -1,0 +1,195 @@
+name: Transcribe Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "Platform to test"
+        required: true
+        type: choice
+        default: "all"
+        options:
+          - all
+          - macos-arm64
+          - macos-intel
+          - windows-x64
+          - linux-x64
+      model:
+        description: "Whisper model to test"
+        required: true
+        type: choice
+        default: "whisper-tiny"
+        options:
+          - whisper-tiny
+          - whisper-base
+          - whisper-small
+          - whisper-medium
+          - whisper-large-v3-turbo-q5
+          - whisper-large-v3-turbo
+          - all-whisper
+
+permissions:
+  contents: read
+
+jobs:
+  select-matrix:
+    name: Select platform/model matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Build matrix
+        id: matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          case "${{ inputs.platform }}" in
+            all)
+              platforms=("macos-arm64:macos-latest" "macos-intel:macos-15-intel" "windows-x64:windows-latest" "linux-x64:ubuntu-22.04")
+              ;;
+            macos-arm64)
+              platforms=("macos-arm64:macos-latest")
+              ;;
+            macos-intel)
+              platforms=("macos-intel:macos-15-intel")
+              ;;
+            windows-x64)
+              platforms=("windows-x64:windows-latest")
+              ;;
+            linux-x64)
+              platforms=("linux-x64:ubuntu-22.04")
+              ;;
+            *)
+              echo "Unsupported platform: ${{ inputs.platform }}" >&2
+              exit 1
+              ;;
+          esac
+
+          case "${{ inputs.model }}" in
+            all-whisper)
+              models=("whisper-tiny" "whisper-base" "whisper-small" "whisper-medium" "whisper-large-v3-turbo-q5" "whisper-large-v3-turbo")
+              ;;
+            whisper-tiny|whisper-base|whisper-small|whisper-medium|whisper-large-v3-turbo-q5|whisper-large-v3-turbo)
+              models=("${{ inputs.model }}")
+              ;;
+            *)
+              echo "Unsupported model: ${{ inputs.model }}" >&2
+              exit 1
+              ;;
+          esac
+
+          items=()
+          for platform in "${platforms[@]}"; do
+            name="${platform%%:*}"
+            os="${platform#*:}"
+            for model in "${models[@]}"; do
+              items+=("{\"name\":\"${name}\",\"os\":\"${os}\",\"model\":\"${model}\"}")
+            done
+          done
+
+          matrix="$(IFS=,; echo "{\"include\":[${items[*]}]}")"
+          echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
+
+  smoke:
+    name: ${{ matrix.model }} on ${{ matrix.name }}
+    needs: select-matrix
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.select-matrix.outputs.matrix) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./client/apps/tauri/src-tauri -> target"
+
+      - name: Build OpenBrief helper
+        working-directory: client/apps/tauri/src-tauri
+        run: cargo build --release -p openbrief-helper
+
+      - name: Embed helper beside OpenBrief CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          helper="client/apps/tauri/src-tauri/target/release/openbrief-helper"
+          embedded="client/apps/tauri/src-tauri/sidecars/supertonic-python/openbrief-helper"
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then
+            helper="${helper}.exe"
+            embedded="${embedded}.exe"
+          fi
+          cp "$helper" "$embedded"
+          test -f "$embedded"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: client/apps/tauri/src-tauri/sidecars/supertonic-python/pyproject.toml
+
+      - name: Install OpenBrief CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -e client/apps/tauri/src-tauri/sidecars/supertonic-python
+          openbrief transcribe --help
+
+      - name: Run transcription smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke-output
+
+          result="smoke-output/openbrief-transcribe-${{ matrix.name }}-${{ matrix.model }}.json"
+          transcript="smoke-output/transcript-${{ matrix.name }}-${{ matrix.model }}.json"
+
+          openbrief transcribe \
+            --model "${{ matrix.model }}" \
+            --models-dir "smoke-output/models" \
+            --output "$transcript" | tee "$result"
+
+          python - <<'PY' "$result" "$transcript" "${{ matrix.model }}"
+          import json
+          import sys
+          from pathlib import Path
+
+          result_path = Path(sys.argv[1])
+          transcript_path = Path(sys.argv[2])
+          expected_model = sys.argv[3]
+
+          result = json.loads(result_path.read_text())
+          transcript = json.loads(transcript_path.read_text())
+
+          if result["model"] != expected_model:
+              raise SystemExit(f"unexpected model: {result['model']}")
+          if result["transcriptBytes"] <= 0:
+              raise SystemExit("empty transcript output")
+          if transcript.get("sourceKind") != "local-stt":
+              raise SystemExit(f"unexpected sourceKind: {transcript.get('sourceKind')}")
+          if "segments" not in transcript:
+              raise SystemExit("transcript is missing segments")
+          if result["result"]["command"] != "transcribe_audio":
+              raise SystemExit(f"unexpected helper command: {result['result']['command']}")
+
+          print(json.dumps({"transcriptBytes": result["transcriptBytes"], "segments": len(transcript["segments"])}))
+          PY
+
+      - name: Upload smoke artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: transcribe-smoke-${{ matrix.name }}-${{ matrix.model }}
+          path: |
+            smoke-output/openbrief-transcribe-${{ matrix.name }}-${{ matrix.model }}.json
+            smoke-output/transcript-${{ matrix.name }}-${{ matrix.model }}.json
+            smoke-output/stt-smoke.wav
+          if-no-files-found: error

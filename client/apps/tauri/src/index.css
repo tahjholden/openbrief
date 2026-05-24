@@ -126,4 +126,18 @@
   .openbrief-chat-markdown a {
     @apply underline underline-offset-2;
   }
+
+  .openbrief-transcript-actions {
+    container: openbrief-transcript-actions / inline-size;
+  }
+
+  @container openbrief-transcript-actions (max-width: 240px) {
+    .openbrief-transcript-action-button {
+      @apply justify-center px-2;
+    }
+
+    .openbrief-transcript-action-label {
+      @apply hidden;
+    }
+  }
 }

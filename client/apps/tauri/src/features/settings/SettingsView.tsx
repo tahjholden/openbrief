@@ -15,7 +15,7 @@ import type {
   SettingsSnapshot,
   VideoDownloadAccessAction,
 } from "@/domain/settings";
-import { useI18n, type LanguageSelection } from "@/i18n";
+import { useI18n, type LanguageSelection, type TranslationKey } from "@/i18n";
 import {
   defaultAiProviderPreferences,
   type AiProviderPreferences,
@@ -30,6 +30,16 @@ import {
   type AppColorSeed,
   type AppTheme,
 } from "@/services/themeSettingsService";
+import {
+  defaultTtsSettings,
+  supertonicPresetVoiceStyles,
+  type SupertonicVoiceStyleId,
+  type TtsSettings,
+} from "@/services/ttsSettingsService";
+import {
+  supertonic3Languages,
+  type Supertonic3LanguageCode,
+} from "@acme/model-card";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -50,6 +60,8 @@ type SettingsViewProps = {
   onColorSeedChange?: (colorSeed: AppColorSeed) => void;
   aiProviderPreferences?: AiProviderPreferences;
   onAiProviderPreferencesChange?: (preferences: AiProviderPreferences) => void;
+  ttsSettings?: TtsSettings;
+  onTtsSettingsChange?: (settings: TtsSettings) => void;
   systemPromptSettings?: SystemPromptSettings;
   onSaveSystemPrompts?: (settings: SystemPromptSettings) => Promise<void> | void;
   onResetSystemPrompts?: () => Promise<SystemPromptSettings> | SystemPromptSettings | void;
@@ -70,6 +82,8 @@ export function SettingsView({
   onColorSeedChange,
   aiProviderPreferences = defaultAiProviderPreferences,
   onAiProviderPreferencesChange,
+  ttsSettings = defaultTtsSettings,
+  onTtsSettingsChange,
   systemPromptSettings = defaultSystemPromptSettings,
   onSaveSystemPrompts,
   onResetSystemPrompts,
@@ -158,6 +172,22 @@ export function SettingsView({
     onAiProviderPreferencesChange?.({
       ...aiProviderPreferences,
       [workflow]: config,
+    });
+  }
+
+  function updateTtsVoice(voiceStyleId: SupertonicVoiceStyleId) {
+    onTtsSettingsChange?.({
+      ...ttsSettings,
+      voiceStyleId,
+      hasSelectedVoice: true,
+    });
+  }
+
+  function updateTtsLanguage(languageCode: Supertonic3LanguageCode) {
+    onTtsSettingsChange?.({
+      ...ttsSettings,
+      languageCode,
+      hasSelectedVoice: true,
     });
   }
 
@@ -606,6 +636,67 @@ export function SettingsView({
 
       <Card className="2xl:col-span-4">
         <CardHeader>
+          <CardTitle>{t("settings.tts.title")}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <DescriptionList
+            rows={[
+              [t("settings.tts.engine"), "Supertonic"],
+              [t("settings.tts.model"), ttsSettings.modelId],
+              [
+                t("settings.tts.language"),
+                supertonicLanguageLabel(ttsSettings.languageCode),
+              ],
+              [
+                t("settings.tts.defaultVoice"),
+                supertonicVoiceStyleLabel(ttsSettings.voiceStyleId, t),
+              ],
+            ]}
+          />
+          <label className="grid gap-1 text-sm" htmlFor="settings-tts-voice">
+            <span className="font-medium">{t("settings.tts.voice")}</span>
+            <span className="text-xs text-muted-foreground">
+              {t("settings.tts.voiceDescription")}
+            </span>
+            <select
+              id="settings-tts-voice"
+              aria-label={t("settings.tts.voice")}
+              value={ttsSettings.voiceStyleId}
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              onChange={(event) =>
+                updateTtsVoice(event.target.value as SupertonicVoiceStyleId)
+              }
+            >
+              {supertonicPresetVoiceStyles.map((voice) => (
+                <option key={voice.id} value={voice.id}>
+                  {supertonicVoiceStyleLabel(voice.id, t)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-1 text-sm" htmlFor="settings-tts-language">
+            <span className="font-medium">{t("settings.tts.language")}</span>
+            <select
+              id="settings-tts-language"
+              aria-label={t("settings.tts.language")}
+              value={ttsSettings.languageCode}
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              onChange={(event) =>
+                updateTtsLanguage(event.target.value as Supertonic3LanguageCode)
+              }
+            >
+              {supertonic3Languages.map((language) => (
+                <option key={language.code} value={language.code}>
+                  {supertonicLanguageLabel(language.code)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </CardContent>
+      </Card>
+
+      <Card className="2xl:col-span-4">
+        <CardHeader>
           <CardTitle>{t("settings.providers.title")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -785,6 +876,20 @@ export function SettingsView({
       ) : null}
     </div>
   );
+}
+
+function supertonicVoiceStyleLabel(
+  voiceStyleId: SupertonicVoiceStyleId,
+  t: (key: TranslationKey, values?: Record<string, string | number>) => string,
+) {
+  return t("settings.tts.voicePreset", { voice: voiceStyleId });
+}
+
+function supertonicLanguageLabel(languageCode: Supertonic3LanguageCode) {
+  const language = supertonic3Languages.find(
+    (candidate) => candidate.code === languageCode,
+  );
+  return language ? `${language.label} (${language.code})` : languageCode;
 }
 
 function SystemPromptEditor({

@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openbrief-model-cli"
+version = "0.1.0"
+description = "OpenBrief local model smoke-test CLI"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+read = ["supertonic>=1.3.1"]
+
+[project.scripts]
+openbrief = "openbrief_supertonic:main"
+
+[tool.setuptools]
+py-modules = ["openbrief_supertonic"]

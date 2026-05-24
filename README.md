@@ -9,7 +9,7 @@ OpenBrief is a pnpm/Turborepo workspace centered on a Tauri v2 desktop app. It s
 | Model type | Supported | TODO |
 | --- | --- | --- |
 | Speech to text | Whisper, Parakeet | Qwen3-ASR |
-| Text to speech | - | Qwen3-TTS, Supertonic 3 |
+| Text to speech | Supertonic 3 | Qwen3-TTS |
 | Large language model | OpenAI GPT, Anthropic Claude, Google Gemini, OpenRouter DeepSeek | Local Gemma 4 |
 
 ## Repository Layout
@@ -169,7 +169,7 @@ Use `pnpm --filter <workspace> <script>` or `pnpm -F <workspace> <script>` for a
 - [ ] Support more document and web source types, including PDFs, HTML pages, and other document formats.
 - [x] Support Parakeet ASR.
 - [ ] Support Qwen3-ASR and Qwen3-ForcedAligner.
-- [ ] Support Supertonic 3 TTS.
+- [x] Support Supertonic 3 TTS.
 - [ ] Support local LLMs, including Gemma 4.
 - [ ] Add voice cloning so summaries can be read aloud in a selected voice.
 - [ ] Share summaries through the web and mobile apps.

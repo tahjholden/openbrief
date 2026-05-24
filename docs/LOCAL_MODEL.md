@@ -1,6 +1,6 @@
 # Local Model Storage
 
-This document defines how OpenBrief should store local model checkpoints and related runtime assets for speech models. It covers the current Whisper and Parakeet STT paths and the planned Supertonic 3 TTS path.
+This document defines how OpenBrief should store local model checkpoints and related runtime assets for speech models. It covers the current Whisper and Parakeet STT paths and the Supertonic 3 TTS path.
 
 ## Storage Principles
 
@@ -85,14 +85,12 @@ This document defines how OpenBrief should store local model checkpoints and rel
             <summary-id>/
               <generation-id>/
                 audio.wav
-                metadata.json
         chat/
           <session-id>.jsonl
           tts/
             <chat-message-id>/
               <generation-id>/
                 audio.wav
-                metadata.json
 ```
 
 `models/supertonic/hf` is a cache/download area. `models/supertonic/supertonic-3` is the app-owned ready-to-run model directory. Runtime state such as imported voice styles and logs belongs under `app-data/supertonic`, not inside the model checkpoint directory. Generated TTS audio belongs beside the summary or chat artifact it reads, under `app-data/library/{videos,audios,pdfs}/{asset-id}`.
@@ -107,7 +105,7 @@ Generated TTS artifacts should be source-scoped:
 
 - Summary read-aloud output goes under the same media asset's `summary/tts/<summary-id>/<generation-id>/` directory. This keeps audio cleanup tied to the summary document that produced it.
 - Chat bubble read-aloud output goes under the same media asset's `chat/tts/<chat-message-id>/<generation-id>/` directory. The chat session remains the source of message order and content; the TTS directory stores derived audio for a specific message.
-- `audio.wav` is the local output artifact. `metadata.json` should record `sourceKind`, source relative path, `summaryId` or `chatMessageId`, optional `chatSessionId`, text hash, engine, model ID, model revision, voice style ID, language, generation settings, sample rate, duration, created time, and license/provenance fields needed for export history.
+- `audio.wav` is the local output artifact for the first pass. Do not add generated-audio metadata/provenance files until the product asks for that surface.
 - The TTS sidecar should receive a Rust-validated library-relative output target. It should not choose arbitrary output paths from renderer input.
 
 Deleting `models/supertonic/supertonic-3` removes the model checkpoint and makes new generation unavailable, but it should not delete imported voices or previously generated summary/chat audio. Deleting `app-data/supertonic` resets Supertonic voice imports and logs, but it should not be required for model upgrades and should not remove library-scoped TTS artifacts.
@@ -236,7 +234,7 @@ Supertonic should use an app-owned ready directory plus an optional Hugging Face
 }
 ```
 
-The first implementation can use the Python SDK sidecar, but model download must still be explicit. The SDK's automatic download behavior should only run inside an OpenBrief `/models/download` command with `HF_HOME`, `HF_HUB_CACHE`, and `SUPERTONIC_MODEL_DIR` pointed at the app-owned directories.
+The first implementation bundles a per-platform PyInstaller `openbrief-supertonic` sidecar so users do not need to install Python or debug pip packages. Model weights are still not bundled. The sidecar runs with `HF_HOME`, `HF_HUB_CACHE`, and `--cache-dir` pointed at app-owned `models/supertonic` directories, so first use downloads only the Supertonic model weights.
 
 ### Required Files
 
@@ -289,13 +287,13 @@ Default generation config:
 | --- | --- | --- | --- | --- | --- |
 | Whisper GGML | Supported | Supported | Supported | Supported | Conditional on helper release target |
 | Parakeet v3 / FluidAudio | Supported on macOS 14+ | Not supported | Not supported | Not supported | Not supported |
-| Supertonic 3 / ONNX Runtime CPU | Planned first-class | Planned first-class | Planned first-class | Planned first-class | Conditional on ONNX Runtime and sidecar packaging |
+| Supertonic 3 / ONNX Runtime CPU | First-class via PyInstaller sidecar | First-class via PyInstaller sidecar | First-class via PyInstaller sidecar | First-class via PyInstaller sidecar | Conditional on release target and wheel availability |
 
 Notes:
 
 - Whisper is the default cross-platform STT fallback.
 - Parakeet is available only when `target_os == macos`, `target_arch == aarch64`, and the detected macOS major version is at least 14.
-- Supertonic should avoid GPU requirements for the first implementation. CPU ONNX Runtime is the minimal-cost cross-platform path.
+- Supertonic avoids GPU requirements for the first implementation. CPU ONNX Runtime inside the PyInstaller sidecar is the minimal-cost cross-platform path.
 
 ## Download And Readiness Rules
 
@@ -303,7 +301,7 @@ Notes:
 | --- | --- | --- | --- |
 | Whisper | Rust downloads direct GGML file to `.partial`, verifies SHA1, then renames. | Final `ggml-*.bin` exists and checksum matched during download. | Keep or remove `.partial`; never mark final file ready on checksum mismatch. |
 | Parakeet | Rust asks the FluidAudio sidecar to download into `models/fluidaudio/parakeet-tdt-0.6b-v3`. | Required CoreML directories and `parakeet_vocab.json` exist. | Hide from catalog on unsupported OS; fall back to Whisper when auto routing cannot use FluidAudio. |
-| Supertonic | Planned sidecar command downloads or materializes assets into `models/supertonic/supertonic-3`. | Required ONNX files, voice styles, and `manifest.json` exist. | Report not ready and keep renderer away from raw cache paths. |
+| Supertonic | PyInstaller sidecar downloads or materializes assets into `models/supertonic`. | Existing chat/summary audio is discovered under library-scoped `tts` directories; future explicit model status should verify required ONNX files, voice styles, and `manifest.json`. | Report not ready and keep renderer away from raw cache paths. |
 
 ## Implementation Anchors
 

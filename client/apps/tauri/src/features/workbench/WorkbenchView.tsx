@@ -6,12 +6,15 @@ import {
   FileText,
   Info,
   Languages,
+  Loader2,
   MessageSquareText,
   Pencil,
+  Play,
   Plus,
   RotateCcw,
   Sparkles,
   Subtitles,
+  Volume2,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -33,6 +36,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@acme/ui/popover";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@acme/ui/resizable";
 import { Textarea } from "@acme/ui/textarea";
 import {
   Select,
@@ -65,6 +73,7 @@ import { mediaSourceTypeForAsset } from "@/domain/media-library";
 import type { ChatContextMode } from "@/domain/chat";
 import type { AiGenerationJob } from "@/hooks/useMediaLibrary";
 import type { VideoPlaybackState } from "@/hooks/useVideoPlayback";
+import type { SupertonicChatTtsArtifact } from "@/services/supertonicService";
 import {
   defaultProviderModels,
   providerLabels,
@@ -133,6 +142,19 @@ type WorkbenchViewProps = {
     summaryId?: string;
     streamingMode: boolean;
   }): Promise<unknown>;
+  onReadChatMessage?(message: ChatMessage, renderedText: string): Promise<unknown>;
+  chatTtsAudioByMessageId?: Record<
+    string,
+    SupertonicChatTtsArtifact | undefined
+  >;
+  onDownloadChatTtsAudio?(
+    message: ChatMessage,
+    audio: SupertonicChatTtsArtifact,
+  ): Promise<unknown> | unknown;
+  onPlayChatTtsAudio?(
+    message: ChatMessage,
+    audio: SupertonicChatTtsArtifact,
+  ): Promise<unknown> | unknown;
   onResetChat?(): void;
   summaryProvider?: ProviderKind;
   summaryProviderModel?: string;
@@ -179,6 +201,10 @@ export function WorkbenchView({
   onOpenTranscriptOverlay,
   onGenerateSummary,
   onSendChat,
+  onReadChatMessage,
+  chatTtsAudioByMessageId = {},
+  onDownloadChatTtsAudio,
+  onPlayChatTtsAudio,
   onResetChat,
   summaryProvider = "openai",
   summaryProviderModel = defaultProviderModels[summaryProvider],
@@ -221,6 +247,11 @@ export function WorkbenchView({
     });
   const [question, setQuestion] = useState("");
   const [pendingChatMessage, setPendingChatMessage] = useState<ChatMessage>();
+  const [readingChatMessageId, setReadingChatMessageId] = useState<string>();
+  const [downloadingChatTtsMessageId, setDownloadingChatTtsMessageId] =
+    useState<string>();
+  const [playingChatTtsMessageId, setPlayingChatTtsMessageId] =
+    useState<string>();
   const [isExtractingTranscript, setIsExtractingTranscript] = useState(false);
   const [isReviewingTranscript, setIsReviewingTranscript] = useState(false);
   const [isTranslatingTranscript, setIsTranslatingTranscript] = useState(false);
@@ -503,6 +534,45 @@ export function WorkbenchView({
     }
   }
 
+  async function readChatMessage(message: ChatMessage, renderedText: string) {
+    if (!onReadChatMessage || readingChatMessageId) return;
+
+    setReadingChatMessageId(message.id);
+    try {
+      await onReadChatMessage(message, renderedText);
+    } finally {
+      setReadingChatMessageId(undefined);
+    }
+  }
+
+  async function downloadChatTtsAudio(
+    message: ChatMessage,
+    audio: SupertonicChatTtsArtifact,
+  ) {
+    if (!onDownloadChatTtsAudio || downloadingChatTtsMessageId) return;
+
+    setDownloadingChatTtsMessageId(message.id);
+    try {
+      await onDownloadChatTtsAudio(message, audio);
+    } finally {
+      setDownloadingChatTtsMessageId(undefined);
+    }
+  }
+
+  async function playChatTtsAudio(
+    message: ChatMessage,
+    audio: SupertonicChatTtsArtifact,
+  ) {
+    if (!onPlayChatTtsAudio || playingChatTtsMessageId) return;
+
+    setPlayingChatTtsMessageId(message.id);
+    try {
+      await onPlayChatTtsAudio(message, audio);
+    } finally {
+      setPlayingChatTtsMessageId(undefined);
+    }
+  }
+
   function seekToSegment(segment: TranscriptSegment) {
     if (!video) return;
 
@@ -543,8 +613,17 @@ export function WorkbenchView({
         onCloseVideoTab={onCloseVideoTab}
         onAddVideo={onAddVideo}
       />
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(280px,0.95fr)_minmax(320px,1.1fr)_minmax(280px,0.95fr)] gap-4">
-      <Card className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+      <ResizablePanelGroup
+        id="workbench-columns"
+        direction="horizontal"
+        className="min-h-0 flex-1"
+      >
+        <ResizablePanel
+          id="workbench-transcript"
+          defaultSize="30%"
+          minSize="240px"
+        >
+      <Card className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
         <CardContent className="flex min-h-0 flex-1 flex-col gap-4 p-4">
           {isInlinePlayerSuppressed ? (
             <div className="flex aspect-video items-center justify-center rounded-md bg-muted text-sm text-muted-foreground">
@@ -815,8 +894,16 @@ export function WorkbenchView({
           </div>
         </CardContent>
       </Card>
+        </ResizablePanel>
 
-      <Card className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+        <ResizableHandle withHandle className="mx-2" />
+
+        <ResizablePanel
+          id="workbench-summary"
+          defaultSize="40%"
+          minSize="320px"
+        >
+      <Card className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
         <CardHeader className="space-y-3">
           <CardTitle className="flex items-center justify-between gap-2">
             <span className="flex min-w-0 items-center gap-2">
@@ -950,8 +1037,12 @@ export function WorkbenchView({
           </div>
         </CardContent>
       </Card>
+        </ResizablePanel>
 
-      <Card className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+        <ResizableHandle withHandle className="mx-2" />
+
+        <ResizablePanel id="workbench-chat" defaultSize="30%" minSize="240px">
+      <Card className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
         <CardHeader>
           <CardTitle className="flex flex-wrap items-center gap-2">
             <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -1004,6 +1095,28 @@ export function WorkbenchView({
                     key={message.id}
                     message={message}
                     isLast={index === displayedChatMessages.length - 1}
+                    isReading={readingChatMessageId === message.id}
+                    ttsAudio={chatTtsAudioByMessageId[message.id]}
+                    isPlayingTts={playingChatTtsMessageId === message.id}
+                    isDownloadingTts={
+                      downloadingChatTtsMessageId === message.id
+                    }
+                    onRead={
+                      onReadChatMessage
+                        ? (renderedText) =>
+                            void readChatMessage(message, renderedText)
+                        : undefined
+                    }
+                    onPlayTtsAudio={
+                      onPlayChatTtsAudio
+                        ? (audio) => void playChatTtsAudio(message, audio)
+                        : undefined
+                    }
+                    onDownloadTtsAudio={
+                      onDownloadChatTtsAudio
+                        ? (audio) => void downloadChatTtsAudio(message, audio)
+                        : undefined
+                    }
                   />
                 ))}
               </ol>
@@ -1070,7 +1183,8 @@ export function WorkbenchView({
           </div>
         </CardContent>
       </Card>
-      </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }
@@ -1078,15 +1192,32 @@ export function WorkbenchView({
 function ChatBubble({
   message,
   isLast,
+  isReading = false,
+  isPlayingTts = false,
+  isDownloadingTts = false,
+  ttsAudio,
+  onRead,
+  onPlayTtsAudio,
+  onDownloadTtsAudio,
 }: {
   message: ChatMessage;
   isLast: boolean;
+  isReading?: boolean;
+  isPlayingTts?: boolean;
+  isDownloadingTts?: boolean;
+  ttsAudio?: SupertonicChatTtsArtifact;
+  onRead?(renderedText: string): void;
+  onPlayTtsAudio?(audio: SupertonicChatTtsArtifact): void;
+  onDownloadTtsAudio?(audio: SupertonicChatTtsArtifact): void;
 }) {
   const { t } = useI18n();
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const [isActionRegionFocused, setIsActionRegionFocused] = useState(false);
   const [isActionRegionHovered, setIsActionRegionHovered] = useState(false);
   const hasUsage = Boolean(message.tokenUsage);
   const showActions = isLast || isActionRegionFocused || isActionRegionHovered;
+  const renderedText = () =>
+    renderedChatTextFromElement(contentRef.current, message.content);
 
   return (
     <li
@@ -1111,6 +1242,7 @@ function ChatBubble({
       onPointerLeave={() => setIsActionRegionHovered(false)}
     >
       <div
+        ref={contentRef}
         className={cn(
           "max-w-[88%] rounded-lg px-3 py-2 text-sm leading-relaxed",
           message.role === "user"
@@ -1130,6 +1262,94 @@ function ChatBubble({
               className="h-7 w-7"
               ariaLabel={t("workbench.chat.copyMessage")}
             />
+            {ttsAudio && onPlayTtsAudio ? (
+              <TooltipProvider delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      disabled={isPlayingTts}
+                      aria-label={t("workbench.chat.playVoiceMessage")}
+                      onClick={() => onPlayTtsAudio(ttsAudio)}
+                    >
+                      {isPlayingTts ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <Play className="h-3.5 w-3.5" aria-hidden="true" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    {t("workbench.chat.playVoiceMessage")}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : null}
+            {onRead ? (
+              <TooltipProvider delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      disabled={isReading}
+                      aria-label={t(
+                        ttsAudio
+                          ? "workbench.chat.regenerateVoiceMessage"
+                          : "workbench.chat.readMessage",
+                      )}
+                      onClick={() => onRead(renderedText())}
+                    >
+                      {isReading ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                      ) : ttsAudio ? (
+                        <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                      ) : (
+                        <Volume2 className="h-3.5 w-3.5" aria-hidden="true" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    {t(
+                      ttsAudio
+                        ? "workbench.chat.regenerateVoiceMessage"
+                        : "workbench.chat.readMessage",
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : null}
+            {ttsAudio && onDownloadTtsAudio ? (
+              <TooltipProvider delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      disabled={isDownloadingTts}
+                      aria-label={t("workbench.chat.downloadVoiceMessage")}
+                      onClick={() => onDownloadTtsAudio(ttsAudio)}
+                    >
+                      {isDownloadingTts ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    {t("workbench.chat.downloadVoiceMessage")}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : null}
             {hasUsage ? (
               <Popover>
                 <PopoverTrigger asChild>
@@ -1181,6 +1401,56 @@ function ChatBubble({
       </div>
     </li>
   );
+}
+
+function renderedChatTextFromElement(
+  element: HTMLElement | null,
+  fallbackText: string,
+) {
+  if (!element) return normalizeRenderedChatText(fallbackText);
+
+  return normalizeRenderedChatText(extractRenderedText(element));
+}
+
+function extractRenderedText(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return node.textContent ?? "";
+  }
+
+  if (!(node instanceof HTMLElement)) {
+    return Array.from(node.childNodes).map(extractRenderedText).join(" ");
+  }
+
+  if (node.tagName === "BR") return "\n";
+
+  const text = Array.from(node.childNodes).map(extractRenderedText).join(" ");
+  return isRenderedTextBlock(node.tagName) ? `\n${text}\n` : text;
+}
+
+function isRenderedTextBlock(tagName: string) {
+  return [
+    "BLOCKQUOTE",
+    "DIV",
+    "H1",
+    "H2",
+    "H3",
+    "H4",
+    "H5",
+    "H6",
+    "LI",
+    "OL",
+    "P",
+    "PRE",
+    "TABLE",
+    "TD",
+    "TH",
+    "TR",
+    "UL",
+  ].includes(tagName);
+}
+
+function normalizeRenderedChatText(text: string) {
+  return text.replace(/\s+/g, " ").trim();
 }
 
 function StreamingChatDraft({ draftText }: { draftText: string }) {
@@ -1517,39 +1787,59 @@ function TranscriptActionPanel({
           </SelectContent>
         </Select>
       </div>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="openbrief-transcript-actions grid grid-cols-3 gap-2">
         <Button
           type="button"
           variant="outline"
           size="sm"
+          className="openbrief-transcript-action-button min-w-0 gap-1.5"
           disabled={isReviewing}
+          aria-label={
+            isReviewing
+              ? t("workbench.transcript.review.running")
+              : t("workbench.transcript.review")
+          }
           onClick={onReview}
         >
-          <Sparkles className="mr-1.5 h-4 w-4" aria-hidden="true" />
-          {isReviewing
-            ? t("workbench.transcript.review.running")
-            : t("workbench.transcript.review")}
+          <Sparkles className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span className="openbrief-transcript-action-label truncate">
+            {isReviewing
+              ? t("workbench.transcript.review.running")
+              : t("workbench.transcript.review")}
+          </span>
         </Button>
         <Button
           type="button"
           variant="outline"
           size="sm"
+          className="openbrief-transcript-action-button min-w-0 gap-1.5"
           disabled={isTranslating}
+          aria-label={
+            isTranslating
+              ? t("workbench.transcript.translate.running")
+              : t("workbench.transcript.translate")
+          }
           onClick={onTranslate}
         >
-          <Languages className="mr-1.5 h-4 w-4" aria-hidden="true" />
-          {isTranslating
-            ? t("workbench.transcript.translate.running")
-            : t("workbench.transcript.translate")}
+          <Languages className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span className="openbrief-transcript-action-label truncate">
+            {isTranslating
+              ? t("workbench.transcript.translate.running")
+              : t("workbench.transcript.translate")}
+          </span>
         </Button>
         <Button
           type="button"
           variant="outline"
           size="sm"
+          className="openbrief-transcript-action-button min-w-0 gap-1.5"
+          aria-label={t("workbench.transcript.overlay")}
           onClick={onOverlay}
         >
-          <Eye className="mr-1.5 h-4 w-4" aria-hidden="true" />
-          {t("workbench.transcript.overlay")}
+          <Eye className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span className="openbrief-transcript-action-label truncate">
+            {t("workbench.transcript.overlay")}
+          </span>
         </Button>
       </div>
       <Dialog

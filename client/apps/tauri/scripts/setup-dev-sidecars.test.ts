@@ -78,6 +78,19 @@ describe("dev sidecar placeholder setup", () => {
     expect(helperNames).toContain("openbrief-helper-aarch64-unknown-linux-gnu");
   });
 
+  it("creates Supertonic sidecar placeholders for all desktop targets", () => {
+    const binariesDir = createTempBinariesDirForTests();
+    const results = setupDevSidecars({
+      binariesDir,
+      targetTriple: "x86_64-unknown-linux-gnu",
+    });
+
+    expect(results.map((result) => result.fileName)).toEqual([
+      "openbrief-helper-x86_64-unknown-linux-gnu",
+      "openbrief-supertonic-x86_64-unknown-linux-gnu",
+    ]);
+  });
+
   it("does not create FluidAudio placeholders for macOS Intel, Windows, or Linux", () => {
     for (const targetTriple of [
       "x86_64-apple-darwin",
@@ -90,6 +103,7 @@ describe("dev sidecar placeholder setup", () => {
 
       expect(results.map((result) => result.fileName)).toEqual([
         sidecarFileName("openbrief-helper", targetTriple),
+        sidecarFileName("openbrief-supertonic", targetTriple),
       ]);
       expect(
         results.some((result) => result.fileName.includes("openbrief-fluidaudio")),

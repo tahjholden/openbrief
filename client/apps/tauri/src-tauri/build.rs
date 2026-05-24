@@ -9,6 +9,7 @@ fn main() {
 }
 
 const HELPER_BASE_NAME: &str = "openbrief-helper";
+const SUPERTONIC_BASE_NAME: &str = "openbrief-supertonic";
 const FLUIDAUDIO_BASE_NAME: &str = "openbrief-fluidaudio";
 const MEDIA_TOOL_NAMES: [&str; 3] = ["yt-dlp", "ffmpeg", "ffprobe"];
 const PLACEHOLDER_MARKER: &str = "OpenBrief dev sidecar placeholder";
@@ -20,33 +21,18 @@ fn ensure_sidecar_contract() {
     }
 
     let profile = std::env::var("PROFILE").unwrap_or_default();
-    let sidecar_path = target_sidecar_path();
+    let target = build_target_triple();
+    let helper_sidecar_path = target_named_sidecar_path(HELPER_BASE_NAME, &target);
+    let supertonic_sidecar_path = target_named_sidecar_path(SUPERTONIC_BASE_NAME, &target);
 
     if profile == "debug" {
-        ensure_debug_sidecar_placeholder(&sidecar_path);
+        ensure_debug_sidecar_placeholder(&helper_sidecar_path);
+        ensure_debug_sidecar_placeholder(&supertonic_sidecar_path);
     } else {
-        enforce_release_sidecar(&sidecar_path);
+        enforce_release_sidecar(&helper_sidecar_path, "helper");
+        enforce_release_sidecar(&supertonic_sidecar_path, "Supertonic");
         enforce_release_fluidaudio_sidecar_if_needed();
     }
-}
-
-fn target_sidecar_path() -> std::path::PathBuf {
-    let manifest_dir = match std::env::var("CARGO_MANIFEST_DIR") {
-        Ok(value) => value,
-        Err(_) => return std::path::PathBuf::from("binaries").join(HELPER_BASE_NAME),
-    };
-    let target = std::env::var("TARGET")
-        .or_else(|_| std::env::var("HOST"))
-        .unwrap_or_else(|_| "aarch64-apple-darwin".to_string());
-    let suffix = if target.contains("windows") {
-        ".exe"
-    } else {
-        ""
-    };
-    let binary_name = format!("{HELPER_BASE_NAME}-{target}{suffix}");
-    let binaries_dir = std::path::Path::new(&manifest_dir).join("binaries");
-
-    binaries_dir.join(binary_name)
 }
 
 fn enforce_release_fluidaudio_sidecar_if_needed() {
@@ -55,7 +41,10 @@ fn enforce_release_fluidaudio_sidecar_if_needed() {
         return;
     }
 
-    enforce_release_sidecar(&target_named_sidecar_path(FLUIDAUDIO_BASE_NAME, &target));
+    enforce_release_sidecar(
+        &target_named_sidecar_path(FLUIDAUDIO_BASE_NAME, &target),
+        "FluidAudio",
+    );
 }
 
 fn target_named_sidecar_path(base_name: &str, target: &str) -> std::path::PathBuf {
@@ -206,17 +195,17 @@ fn ensure_debug_sidecar_placeholder(binary_path: &std::path::Path) {
     }
 }
 
-fn enforce_release_sidecar(binary_path: &std::path::Path) {
+fn enforce_release_sidecar(binary_path: &std::path::Path, sidecar_name: &str) {
     let metadata = std::fs::metadata(binary_path).unwrap_or_else(|_| {
         panic!(
-            "release build requires a real OpenBrief helper sidecar at {}",
+            "release build requires a real OpenBrief {sidecar_name} sidecar at {}",
             binary_path.display()
         )
     });
 
     if metadata.len() < MIN_REAL_BINARY_SIZE_BYTES {
         panic!(
-            "release build refuses to bundle a dev helper placeholder at {}",
+            "release build refuses to bundle a dev {sidecar_name} placeholder at {}",
             binary_path.display()
         );
     }
@@ -224,7 +213,7 @@ fn enforce_release_sidecar(binary_path: &std::path::Path) {
     if let Ok(contents) = std::fs::read_to_string(binary_path) {
         if contents.contains(PLACEHOLDER_MARKER) {
             panic!(
-                "release build refuses to bundle a dev helper placeholder at {}",
+                "release build refuses to bundle a dev {sidecar_name} placeholder at {}",
                 binary_path.display()
             );
         }
