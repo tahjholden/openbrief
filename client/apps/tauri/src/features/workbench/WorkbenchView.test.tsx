@@ -66,6 +66,12 @@ describe("WorkbenchView", () => {
     const onDownloadPodcastAudio = vi.fn();
     const onDownloadPodcastScript = vi.fn();
     const onDeletePodcast = vi.fn();
+    const audioPlay = vi
+      .spyOn(window.HTMLMediaElement.prototype, "play")
+      .mockResolvedValue(undefined);
+    const audioPause = vi
+      .spyOn(window.HTMLMediaElement.prototype, "pause")
+      .mockImplementation(() => {});
     const { container } = render(
       <WorkbenchView
         {...defaultProps({
@@ -106,8 +112,22 @@ describe("WorkbenchView", () => {
       }),
     ).toBeInTheDocument();
 
+    const audio = container.querySelector("audio") as HTMLAudioElement;
+    expect(audio).toHaveAttribute("src", "asset://podcast.wav");
+
     fireEvent.click(screen.getByRole("button", { name: "Play" }));
-    expect(onPlayPodcast).toHaveBeenCalledWith(podcastFixture);
+    expect(audioPlay).toHaveBeenCalledTimes(1);
+    expect(onPlayPodcast).not.toHaveBeenCalled();
+
+    fireEvent.play(audio);
+    expect(onPauseVideo).toHaveBeenCalledWith("video-1");
+    expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    expect(audioPause).toHaveBeenCalledTimes(1);
+
+    fireEvent.pause(audio);
+    expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
 
     fireEvent.keyDown(
       screen.getByRole("button", { name: "Download podcast" }),
@@ -136,10 +156,6 @@ describe("WorkbenchView", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(onDeletePodcast).toHaveBeenCalledWith(podcastFixture);
 
-    const audio = container.querySelector("audio");
-    expect(audio).toHaveAttribute("src", "asset://podcast.wav");
-    fireEvent.play(audio as HTMLAudioElement);
-    expect(onPauseVideo).toHaveBeenCalledWith("video-1");
     const hostTurn = screen.getByRole("button", {
       name: /host.*0:00.*welcome to the brief/i,
     });
@@ -156,6 +172,9 @@ describe("WorkbenchView", () => {
     expect(screen.getByText("Welcome to the brief.")).toBeInTheDocument();
     expect(screen.getByText("Guest")).toBeInTheDocument();
     expect(screen.getByText("Here is the key point.")).toBeInTheDocument();
+
+    audioPlay.mockRestore();
+    audioPause.mockRestore();
   });
 
   it("limits voice clone transcript selection to three contiguous blocks", () => {

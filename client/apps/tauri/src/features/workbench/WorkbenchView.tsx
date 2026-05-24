@@ -33,7 +33,7 @@ import type {
   PodcastTtsSettings,
   TtsLanguageCode,
 } from "@/services/ttsSettingsService";
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CopyActionButton } from "@/components/CopyAction";
 import { MarkdownRenderer } from "@/components/markdown/MarkdownRenderer";
@@ -309,6 +309,8 @@ export function WorkbenchView({
   const [podcastSettings, setPodcastSettings] = useState(() =>
     loadPodcastTtsSettings(),
   );
+  const podcastAudioElementRef = useRef<HTMLAudioElement | null>(null);
+  const [isPodcastAudioPlaying, setIsPodcastAudioPlaying] = useState(false);
   const [podcastSourceKind, setPodcastSourceKind] =
     useState<PodcastSourceKind>("current-summary");
   const [isSummaryGenerateDialogOpen, setIsSummaryGenerateDialogOpen] =
@@ -385,6 +387,10 @@ export function WorkbenchView({
       setVoiceCloneTranscriptSegmentIds([]);
     }
   }, [isVoiceCloneModeEnabled]);
+
+  useEffect(() => {
+    setIsPodcastAudioPlaying(false);
+  }, [podcast?.id, podcastAudioUrl]);
 
   const displayedChatMessages = useMemo(() => {
     if (!pendingChatMessage) return chatMessages;
@@ -699,6 +705,27 @@ export function WorkbenchView({
   function submitPodcastGeneration() {
     setIsPodcastGenerateDialogOpen(false);
     void generatePodcast().catch(() => {});
+  }
+
+  function togglePodcastAudioPlayback(currentPodcast: PodcastDocument) {
+    const audio = podcastAudioElementRef.current;
+
+    if (!audio) {
+      void onPlayPodcast?.(currentPodcast);
+      return;
+    }
+
+    if (isPodcastAudioPlaying) {
+      audio.pause();
+      return;
+    }
+
+    try {
+      const playResult = audio.play();
+      void playResult?.catch(() => setIsPodcastAudioPlaying(false));
+    } catch {
+      setIsPodcastAudioPlaying(false);
+    }
   }
 
   async function downloadChatTtsAudio(
@@ -1172,7 +1199,12 @@ export function WorkbenchView({
                         onGenerate={submitPodcastGeneration}
                       />
                     }
-                    onPlayPodcast={onPlayPodcast}
+                    isPlaying={isPodcastAudioPlaying}
+                    onTogglePlayback={
+                      podcastAudioUrl || onPlayPodcast
+                        ? () => togglePodcastAudioPlayback(podcast)
+                        : undefined
+                    }
                     onDownloadPodcastAudio={onDownloadPodcastAudio}
                     onDownloadPodcastScript={onDownloadPodcastScript}
                     onDeletePodcast={onDeletePodcast}
@@ -1262,6 +1294,7 @@ export function WorkbenchView({
                   sourceKind={podcastSourceKind}
                   hasSummary={Boolean(activeSummary)}
                   hasTranscript={transcript.length > 0}
+                  audioRef={podcastAudioElementRef}
                   generateAction={
                     <PodcastGenerateDialog
                       open={isPodcastGenerateDialogOpen}
@@ -1280,9 +1313,14 @@ export function WorkbenchView({
                   }
                   onAudioPlay={
                     podcast
-                      ? () => onPauseVideo(podcast.sourceAssetId)
+                      ? () => {
+                          setIsPodcastAudioPlaying(true);
+                          onPauseVideo(podcast.sourceAssetId);
+                        }
                       : undefined
                   }
+                  onAudioPause={() => setIsPodcastAudioPlaying(false)}
+                  onAudioEnded={() => setIsPodcastAudioPlaying(false)}
                 />
               )}
             </CardContent>
@@ -1525,14 +1563,16 @@ function BriefEmptyState({
 function PodcastHeaderActions({
   podcast,
   generateAction,
-  onPlayPodcast,
+  isPlaying,
+  onTogglePlayback,
   onDownloadPodcastAudio,
   onDownloadPodcastScript,
   onDeletePodcast,
 }: {
   podcast: PodcastDocument;
   generateAction: ReactNode;
-  onPlayPodcast?(podcast: PodcastDocument): Promise<unknown> | unknown;
+  isPlaying: boolean;
+  onTogglePlayback?(): void;
   onDownloadPodcastAudio?(podcast: PodcastDocument): Promise<unknown> | unknown;
   onDownloadPodcastScript?(
     podcast: PodcastDocument,
@@ -1548,14 +1588,20 @@ function PodcastHeaderActions({
     <TooltipProvider delayDuration={150}>
       <div className="flex flex-wrap items-center gap-2">
         {generateAction}
-        {onPlayPodcast ? (
+        {onTogglePlayback ? (
           <Button
             type="button"
             variant="outline"
-            onClick={() => void onPlayPodcast(podcast)}
+            onClick={onTogglePlayback}
           >
-            <Play className="h-4 w-4" aria-hidden="true" />
-            {t("workbench.podcast.play")}
+            {isPlaying ? (
+              <Pause className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <Play className="h-4 w-4" aria-hidden="true" />
+            )}
+            {isPlaying
+              ? t("workbench.podcast.pause")
+              : t("workbench.podcast.play")}
           </Button>
         ) : null}
         {hasDownloadAction ? (
@@ -1630,8 +1676,11 @@ function PodcastBriefPanel({
   sourceKind,
   hasSummary,
   hasTranscript,
+  audioRef,
   generateAction,
   onAudioPlay,
+  onAudioPause,
+  onAudioEnded,
 }: {
   podcast?: PodcastDocument;
   podcastHistory: PodcastDocument[];
@@ -1640,11 +1689,13 @@ function PodcastBriefPanel({
   sourceKind: PodcastSourceKind;
   hasSummary: boolean;
   hasTranscript: boolean;
+  audioRef: RefObject<HTMLAudioElement | null>;
   generateAction: ReactNode;
   onAudioPlay?(): void;
+  onAudioPause?(): void;
+  onAudioEnded?(): void;
 }) {
   const { t } = useI18n();
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [currentAudioTime, setCurrentAudioTime] = useState(0);
   const sourceAvailable =
     sourceKind === "current-summary" ? hasSummary : hasTranscript;
@@ -1727,6 +1778,8 @@ function PodcastBriefPanel({
             preload="metadata"
             src={podcastAudioUrl}
             onPlay={onAudioPlay}
+            onPause={onAudioPause}
+            onEnded={onAudioEnded}
             onTimeUpdate={(event) =>
               setCurrentAudioTime(event.currentTarget.currentTime)
             }
