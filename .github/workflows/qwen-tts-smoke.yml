@@ -60,7 +60,7 @@ jobs:
         run: |
           macos_arm64='{"name":"macos-arm64","os":"macos-latest"}'
           macos_intel='{"name":"macos-intel","os":"macos-15-intel"}'
-          windows_x64='{"name":"windows-x64","os":"windows-latest"}'
+          windows_x64='{"name":"windows-x64","os":"windows-2025-vs2026"}'
           linux_x64='{"name":"linux-x64","os":"ubuntu-22.04"}'
 
           case "${{ inputs.platform }}" in
@@ -98,17 +98,17 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: "pip"
           cache-dependency-path: client/apps/tauri/src-tauri/sidecars/voicebox-python/pyproject.toml
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "22"
 
@@ -189,7 +189,7 @@ jobs:
           PY
 
       - name: Upload smoke artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: qwen-tts-smoke-${{ matrix.name }}
           path: |
