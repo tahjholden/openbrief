@@ -5,6 +5,7 @@ import type {
 } from "@/domain/media-library";
 import { createSummaryChatService } from "@/services/summaryChatService";
 import { defaultSystemPromptSettings } from "@/services/systemPromptSettingsService";
+import { defaultGenerationSettings } from "@/services/generationSettingsService";
 import { sanitizeChatMessageTtsPathSegment } from "@/domain/chat";
 import { createProviderRequestPlan } from "@/domain/provider";
 import type {
@@ -192,6 +193,90 @@ describe("summary chat service", () => {
       systemPrompt: "Custom chat system prompt",
     });
   });
+
+  it("passes scenario generation settings to provider calls", async () => {
+    const providerCalls: ProviderCompletionRequest[] = [];
+    const providerService: ProviderService = {
+      complete: vi.fn(async (request) => {
+        providerCalls.push(request);
+        return {
+          ok: true as const,
+          text:
+            request.operation === "podcast_script"
+              ? JSON.stringify({
+                  title: "Podcast",
+                  description: "Description",
+                  turns: [
+                    { speakerId: "A", text: "Hello" },
+                    { speakerId: "B", text: "Hi" },
+                    { speakerId: "A", text: "More detail" },
+                    { speakerId: "B", text: "Closing thought" },
+                  ],
+                })
+              : request.operation === "transcript_translate"
+                ? "s1\t0:00\t번역된 인트로"
+                : request.operation === "transcript_review"
+                  ? "s1\tCorrected intro"
+                  : request.operation === "summary"
+                    ? "# Summary"
+                    : "Answer",
+          requestPlan: createProviderRequestPlan(request),
+        };
+      }),
+    };
+    const generationSettings = {
+      ...defaultGenerationSettings,
+      summary: { temperature: 0.31, topP: 0.81, maxTokens: 1111 },
+      chat: { temperature: 0.32, topP: 0.82, maxTokens: 2222 },
+      podcast_script: { temperature: 0.33, topP: 0.83, maxTokens: 3333 },
+      transcript_review: { temperature: 0.34, topP: 0.84, maxTokens: 4444 },
+      transcript_translate: { temperature: 0.35, topP: 0.85, maxTokens: 5555 },
+    };
+    const service = createSummaryChatService(
+      providerService,
+      () => defaultSystemPromptSettings,
+      () => generationSettings,
+    );
+
+    const summary = await service.generateSummary({ video, transcript, provider: "openai" });
+    await service.sendChat({
+      video,
+      question: "What is the intro?",
+      contextMode: "summary",
+      provider: "openai",
+      transcript,
+      summary,
+    });
+    await service.generatePodcastScript({
+      video,
+      sourceKind: "current-summary",
+      summary,
+      transcript,
+      mode: "podcast-summary",
+      lengthMode: "short",
+      speakers: [
+        { id: "A", label: "A", voiceStyleId: "M1" },
+        { id: "B", label: "B", voiceStyleId: "F2" },
+      ],
+      provider: "openai",
+    });
+    await service.reviewTranscript({ video, transcript, provider: "openai" });
+    await service.translateTranscript({
+      video,
+      transcript,
+      provider: "openai",
+      language: { code: "ko", label: "Korean" },
+    });
+
+    expect(providerCalls.map((call) => [call.operation, call.generationParams])).toEqual([
+      ["summary", generationSettings.summary],
+      ["chat", generationSettings.chat],
+      ["podcast_script", generationSettings.podcast_script],
+      ["transcript_review", generationSettings.transcript_review],
+      ["transcript_translate", generationSettings.transcript_translate],
+    ]);
+  });
+
 
   it("reviews transcript text through one compact provider request", async () => {
     const providerCalls: ProviderCompletionRequest[] = [];

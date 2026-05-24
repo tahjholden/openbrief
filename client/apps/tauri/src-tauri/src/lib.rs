@@ -191,6 +191,7 @@ pub fn run() {
             media_tools::update_yt_dlp_now,
             platform_plugins::platform_plugin_contract,
             provider::complete_provider_request,
+            provider::complete_provider_stream_request,
             show_transcript_overlay,
             stt_models::stt_model_catalog,
             stt_models::download_stt_model,

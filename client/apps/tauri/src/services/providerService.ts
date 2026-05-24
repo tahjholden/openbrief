@@ -2,14 +2,17 @@ import type { AiTokenUsage, ProviderKind } from "@/domain/media-library";
 import {
   createProviderRequestPlan,
   redactProviderDiagnostic,
+  type GenerationParams,
   type ProviderOperation,
   type ProviderRequestPlan,
 } from "@/domain/provider";
 import {
   createProviderHttpRequest,
+  extractProviderFinishReason,
   extractProviderUsage,
   extractProviderText,
   fetchProviderHttpClient,
+  type ProviderFinishReason,
   type ProviderHttpClient,
   type ProviderHttpResponse,
 } from "@/services/providerAdapters";
@@ -30,6 +33,8 @@ export type ProviderCompletionRequest = {
   userPrompt: string;
   model?: string;
   streamingMode?: boolean;
+  generationParams?: GenerationParams;
+  continuationText?: string;
   onTextSnapshot?(text: string): void;
 };
 
@@ -38,6 +43,7 @@ export type ProviderCompletionResult =
       ok: true;
       text: string;
       usage?: AiTokenUsage;
+      finishReason?: ProviderFinishReason;
       requestPlan: ProviderRequestPlan;
     }
   | {
@@ -57,6 +63,10 @@ export type ProviderCredentialResolver = (
 
 export type TrustedProviderHttpClient = (
   requestPlan: ProviderRequestPlan,
+  options?: {
+    provider: ProviderKind;
+    onTextSnapshot?(text: string): void;
+  },
 ) => Promise<ProviderHttpResponse>;
 
 export type LiveProviderServiceOptions = {
@@ -65,6 +75,8 @@ export type LiveProviderServiceOptions = {
   trustedHttpClient?: TrustedProviderHttpClient;
   fallbackService?: ProviderService;
 };
+
+const maxProviderContinuationRequests = 4;
 
 export function createMockProviderService(): ProviderService {
   return {
@@ -89,6 +101,7 @@ export function createMockProviderService(): ProviderService {
         ok: true as const,
         text,
         usage: createMockTokenUsage(request, text),
+        finishReason: "stop" as const,
         requestPlan,
       };
       logRuntimeInfo("after calling llm request", {
@@ -148,8 +161,8 @@ export function createLiveProviderService({
 }: LiveProviderServiceOptions): ProviderService {
   return {
     async complete(request) {
-      const requestPlan = createProviderRequestPlan(request);
       const startedAt = performance.now();
+      const initialRequestPlan = createProviderRequestPlan(request);
       logRuntimeInfo("before calling llm request", {
         provider: request.provider,
         operation: request.operation,
@@ -160,42 +173,17 @@ export function createLiveProviderService({
 
       if (trustedHttpClient) {
         try {
-          const response = await trustedHttpClient(requestPlan);
-
-          if (response.status < 200 || response.status >= 300) {
-            logRuntimeError("after calling llm request", {
-              provider: request.provider,
-              operation: request.operation,
-              model: request.model,
-              mode: "trusted-live",
-              status: "http_error",
-              httpStatus: response.status,
-              elapsedMs: Math.round(performance.now() - startedAt),
-            });
-            return createProviderFailureResult({
-              request,
-              error: {
-                status: response.status,
-                body: response.body,
-              },
-            });
-          }
-
-          logRuntimeInfo("after calling llm request", {
-            provider: request.provider,
-            operation: request.operation,
-            model: request.model,
+          return await completeProviderWithContinuation({
+            request,
+            startedAt,
+            initialRequestPlan,
             mode: "trusted-live",
-            status: "success",
-            httpStatus: response.status,
-            elapsedMs: Math.round(performance.now() - startedAt),
+            executeAttempt: async ({ attemptRequest, requestPlan, onTextSnapshot }) =>
+              trustedHttpClient(requestPlan, {
+                provider: attemptRequest.provider,
+                onTextSnapshot,
+              }),
           });
-          return {
-            ok: true,
-            text: extractProviderText(request.provider, response.body),
-            usage: extractProviderUsage(request.provider, response.body),
-            requestPlan,
-          };
         } catch (error) {
           logRuntimeError("after calling llm request", {
             provider: request.provider,
@@ -236,45 +224,21 @@ export function createLiveProviderService({
       }
 
       try {
-        const response = await httpClient(
-          createProviderHttpRequest({ requestPlan, credential }),
-        );
-
-        if (response.status < 200 || response.status >= 300) {
-          logRuntimeError("after calling llm request", {
-            provider: request.provider,
-            operation: request.operation,
-            model: request.model,
-            mode: "live",
-            status: "http_error",
-            httpStatus: response.status,
-            elapsedMs: Math.round(performance.now() - startedAt),
-          });
-          return createProviderFailureResult({
-            request,
-            error: {
-              status: response.status,
-              body: response.body,
-            },
-            secrets: [credential],
-          });
-        }
-
-        logRuntimeInfo("after calling llm request", {
-          provider: request.provider,
-          operation: request.operation,
-          model: request.model,
+        return await completeProviderWithContinuation({
+          request,
+          startedAt,
+          initialRequestPlan,
           mode: "live",
-          status: "success",
-          httpStatus: response.status,
-          elapsedMs: Math.round(performance.now() - startedAt),
+          executeAttempt: async ({ attemptRequest, requestPlan, onTextSnapshot }) =>
+            httpClient(
+              createProviderHttpRequest({ requestPlan, credential }),
+              {
+                provider: attemptRequest.provider,
+                onTextSnapshot,
+              },
+            ),
+          secrets: [credential],
         });
-        return {
-          ok: true,
-          text: extractProviderText(request.provider, response.body),
-          usage: extractProviderUsage(request.provider, response.body),
-          requestPlan,
-        };
       } catch (error) {
         logRuntimeError("after calling llm request", {
           provider: request.provider,
@@ -292,6 +256,153 @@ export function createLiveProviderService({
       }
     },
   };
+}
+
+async function completeProviderWithContinuation({
+  request,
+  startedAt,
+  initialRequestPlan,
+  mode,
+  executeAttempt,
+  secrets = [],
+}: {
+  request: ProviderCompletionRequest;
+  startedAt: number;
+  initialRequestPlan: ProviderRequestPlan;
+  mode: "live" | "trusted-live";
+  executeAttempt({
+    attemptRequest,
+    requestPlan,
+    onTextSnapshot,
+  }: {
+    attemptRequest: ProviderCompletionRequest;
+    requestPlan: ProviderRequestPlan;
+    onTextSnapshot?: (text: string) => void;
+  }): Promise<ProviderHttpResponse>;
+  secrets?: string[];
+}): Promise<ProviderCompletionResult> {
+  let text = "";
+  let usage: AiTokenUsage | undefined;
+  let finishReason: ProviderFinishReason = "unknown";
+  let lastHttpStatus: number | undefined;
+
+  for (
+    let attempt = 0;
+    attempt <= maxProviderContinuationRequests;
+    attempt += 1
+  ) {
+    const attemptRequest: ProviderCompletionRequest =
+      attempt === 0 ? request : { ...request, continuationText: text };
+    const requestPlan =
+      attempt === 0 ? initialRequestPlan : createProviderRequestPlan(attemptRequest);
+    const textBeforeAttempt = text;
+    const onTextSnapshot = request.onTextSnapshot
+      ? (attemptText: string) => {
+          request.onTextSnapshot?.(`${textBeforeAttempt}${attemptText}`);
+        }
+      : undefined;
+    const response = await executeAttempt({
+      attemptRequest,
+      requestPlan,
+      onTextSnapshot,
+    });
+    lastHttpStatus = response.status;
+
+    if (response.status < 200 || response.status >= 300) {
+      logRuntimeError("after calling llm request", {
+        provider: request.provider,
+        operation: request.operation,
+        model: request.model,
+        mode,
+        status: "http_error",
+        httpStatus: response.status,
+        elapsedMs: Math.round(performance.now() - startedAt),
+      });
+      return createProviderFailureResult({
+        request: attemptRequest,
+        error: {
+          status: response.status,
+          body: response.body,
+        },
+        secrets,
+      });
+    }
+
+    const attemptText = extractProviderText(request.provider, response.body);
+    text += attemptText;
+    request.onTextSnapshot?.(text);
+    usage = mergeProviderUsage(
+      usage,
+      extractProviderUsage(request.provider, response.body),
+    );
+    finishReason = extractProviderFinishReason(request.provider, response.body);
+
+    if (finishReason !== "length") {
+      logRuntimeInfo("after calling llm request", {
+        provider: request.provider,
+        operation: request.operation,
+        model: request.model,
+        mode,
+        status: "success",
+        httpStatus: response.status,
+        finishReason,
+        continuationAttempts: attempt,
+        elapsedMs: Math.round(performance.now() - startedAt),
+      });
+      return {
+        ok: true,
+        text,
+        usage,
+        finishReason,
+        requestPlan: initialRequestPlan,
+      };
+    }
+  }
+
+  logRuntimeWarn("after calling llm request", {
+    provider: request.provider,
+    operation: request.operation,
+    model: request.model,
+    mode,
+    status: "max_continuation_attempts_reached",
+    httpStatus: lastHttpStatus,
+    finishReason,
+    continuationAttempts: maxProviderContinuationRequests,
+    elapsedMs: Math.round(performance.now() - startedAt),
+  });
+  return {
+    ok: true,
+    text,
+    usage,
+    finishReason: "length",
+    requestPlan: initialRequestPlan,
+  };
+}
+
+function mergeProviderUsage(
+  current: AiTokenUsage | undefined,
+  next: AiTokenUsage | undefined,
+): AiTokenUsage | undefined {
+  if (!current) return next;
+  if (!next) return current;
+
+  return {
+    inputTokens: sumOptionalNumbers(current.inputTokens, next.inputTokens),
+    cachedInputTokens: sumOptionalNumbers(
+      current.cachedInputTokens,
+      next.cachedInputTokens,
+    ),
+    outputTokens: sumOptionalNumbers(current.outputTokens, next.outputTokens),
+    totalTokens: sumOptionalNumbers(current.totalTokens, next.totalTokens),
+  };
+}
+
+function sumOptionalNumbers(
+  first: number | undefined,
+  second: number | undefined,
+): number | undefined {
+  const total = (first ?? 0) + (second ?? 0);
+  return total > 0 ? total : undefined;
 }
 
 export function createProviderFailureResult({

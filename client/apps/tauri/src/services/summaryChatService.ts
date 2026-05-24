@@ -43,6 +43,10 @@ import {
   loadSystemPromptSettings,
   type SystemPromptSettings,
 } from "@/services/systemPromptSettingsService";
+import {
+  loadGenerationSettings,
+  type GenerationSettings,
+} from "@/services/generationSettingsService";
 
 export type SummaryChatService = {
   generateSummary(request: GenerateSummaryRequest): Promise<SummaryDocument>;
@@ -120,16 +124,19 @@ export type TranscriptTranslationRequest = {
 };
 
 export type SystemPromptSettingsProvider = () => SystemPromptSettings;
+export type GenerationSettingsProvider = () => GenerationSettings;
 
 const maxTranscriptTransformAttempts = 3;
 
 export function createSummaryChatService(
   providerService: ProviderService = createMockProviderService(),
   getSystemPromptSettings: SystemPromptSettingsProvider = loadSystemPromptSettings,
+  getGenerationSettings: GenerationSettingsProvider = loadGenerationSettings,
 ): SummaryChatService {
   return {
     async generateSummary(request) {
       const systemPrompts = getSystemPromptSettings() ?? defaultSystemPromptSettings;
+      const generationSettings = getGenerationSettings();
       const prompt = createSummaryPrompt({
         video: request.video,
         segments: request.transcript,
@@ -147,6 +154,7 @@ export function createSummaryChatService(
         userPrompt: prompt.userPrompt,
         model: request.model,
         streamingMode: request.streamingMode,
+        generationParams: generationSettings.summary,
         onTextSnapshot: request.onTextSnapshot,
       });
 
@@ -168,6 +176,7 @@ export function createSummaryChatService(
     },
 
     async generatePodcastScript(request) {
+      const generationSettings = getGenerationSettings();
       const prompt = createPodcastScriptPrompt(request);
       const result = await providerService.complete({
         provider: request.provider,
@@ -175,6 +184,7 @@ export function createSummaryChatService(
         systemPrompt: prompt.systemPrompt,
         userPrompt: prompt.userPrompt,
         model: request.model,
+        generationParams: generationSettings.podcast_script,
       });
 
       if (!result.ok) {
@@ -189,6 +199,7 @@ export function createSummaryChatService(
 
     async sendChat(request) {
       const systemPrompts = getSystemPromptSettings() ?? defaultSystemPromptSettings;
+      const generationSettings = getGenerationSettings();
       const prompt = createChatPrompt({
         ...request,
         systemPromptOverride: systemPrompts.chat,
@@ -208,6 +219,7 @@ export function createSummaryChatService(
         userPrompt: prompt.userPrompt,
         model: request.model,
         streamingMode: request.streamingMode,
+        generationParams: generationSettings.chat,
         onTextSnapshot: request.onTextSnapshot,
       });
 
@@ -232,11 +244,13 @@ export function createSummaryChatService(
 
     async reviewTranscript(request) {
       const systemPrompts = getSystemPromptSettings() ?? defaultSystemPromptSettings;
+      const generationSettings = getGenerationSettings();
       const textById = await completeTranscriptTransformWithResume({
         providerService,
         provider: request.provider,
         operation: "transcript_review",
         model: request.model,
+        generationParams: generationSettings.transcript_review,
         segments: request.transcript,
         createPrompt: (segments) =>
           createTranscriptReviewPrompt({
@@ -251,11 +265,13 @@ export function createSummaryChatService(
 
     async translateTranscript(request) {
       const systemPrompts = getSystemPromptSettings() ?? defaultSystemPromptSettings;
+      const generationSettings = getGenerationSettings();
       const textById = await completeTranscriptTransformWithResume({
         providerService,
         provider: request.provider,
         operation: "transcript_translate",
         model: request.model,
+        generationParams: generationSettings.transcript_translate,
         segments: request.transcript,
         createPrompt: (segments) =>
           createTranscriptTranslationPrompt({
@@ -287,6 +303,7 @@ async function completeTranscriptTransformWithResume({
   provider,
   operation,
   model,
+  generationParams,
   segments,
   createPrompt,
 }: {
@@ -294,6 +311,7 @@ async function completeTranscriptTransformWithResume({
   provider: ProviderKind;
   operation: "transcript_review" | "transcript_translate";
   model?: string;
+  generationParams: GenerationSettings["transcript_review"];
   segments: TranscriptSegment[];
   createPrompt(segments: TranscriptSegment[]): {
     systemPrompt: string;
@@ -318,6 +336,7 @@ async function completeTranscriptTransformWithResume({
       systemPrompt: prompt.systemPrompt,
       userPrompt: prompt.userPrompt,
       model,
+      generationParams,
       streamingMode: true,
       onTextSnapshot: (text) => {
         latestSnapshot = text;

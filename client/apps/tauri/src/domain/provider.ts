@@ -17,6 +17,12 @@ export type ProviderRequestPlan = {
   body: Record<string, unknown>;
 };
 
+export type GenerationParams = {
+  temperature?: number;
+  topP?: number;
+  maxTokens?: number;
+};
+
 export type ProviderAccountStatus = {
   provider: ProviderKind;
   label: string;
@@ -72,6 +78,17 @@ export const defaultProviderModels: Record<ProviderKind, string> = {
   openrouter: "deepseek/deepseek-v4-flash",
 };
 
+export const defaultGenerationParamsByOperation: Record<
+  ProviderOperation,
+  Required<GenerationParams>
+> = {
+  summary: { temperature: 0.3, topP: 0.9, maxTokens: 4096 },
+  chat: { temperature: 0.2, topP: 0.9, maxTokens: 2048 },
+  podcast_script: { temperature: 0.55, topP: 0.95, maxTokens: 4096 },
+  transcript_review: { temperature: 0.1, topP: 0.9, maxTokens: 4096 },
+  transcript_translate: { temperature: 0.1, topP: 0.9, maxTokens: 4096 },
+};
+
 const forbiddenSecretKeyFragments = [
   "apikey",
   "api_key",
@@ -103,23 +120,41 @@ export function createProviderRequestPlan({
   systemPrompt,
   userPrompt,
   model,
+  streamingMode,
+  generationParams,
+  continuationText,
 }: {
   provider: ProviderKind;
   operation: ProviderOperation;
   systemPrompt: string;
   userPrompt: string;
   model?: string;
+  streamingMode?: boolean;
+  generationParams?: GenerationParams;
+  continuationText?: string;
 }): ProviderRequestPlan {
   const selectedModel = model ?? defaultProviderModels[provider];
+  const selectedGenerationParams = normalizeGenerationParams(
+    generationParams,
+    defaultGenerationParamsByOperation[operation],
+  );
 
   return {
     provider,
     operation,
-    endpoint: createProviderEndpoint(provider, selectedModel),
+    endpoint: createProviderEndpoint(provider, selectedModel, Boolean(streamingMode)),
     method: "POST",
     credentialPolicy: "tauri-secret-store",
     headers: createRedactedHeaderPlan(provider),
-    body: createProviderBody(provider, selectedModel, systemPrompt, userPrompt),
+    body: createProviderBody({
+      provider,
+      model: selectedModel,
+      systemPrompt,
+      userPrompt,
+      generationParams: selectedGenerationParams,
+      streamingMode,
+      continuationText,
+    }),
   };
 }
 
@@ -197,47 +232,166 @@ function createRedactedHeaderPlan(provider: ProviderKind): Record<string, string
   }
 }
 
-function createProviderEndpoint(provider: ProviderKind, model: string) {
+function createProviderEndpoint(
+  provider: ProviderKind,
+  model: string,
+  streamingMode: boolean,
+) {
   if (provider !== "gemini") {
     return providerEndpoints[provider];
   }
 
-  return providerEndpoints.gemini.replace("{model}", encodeURIComponent(model));
+  const method = streamingMode ? "streamGenerateContent" : "generateContent";
+  return providerEndpoints.gemini
+    .replace("{model}", encodeURIComponent(model))
+    .replace("generateContent", method);
 }
 
-function createProviderBody(
-  provider: ProviderKind,
-  model: string,
-  systemPrompt: string,
-  userPrompt: string,
-) {
+function createProviderBody({
+  provider,
+  model,
+  systemPrompt,
+  userPrompt,
+  generationParams,
+  streamingMode,
+  continuationText,
+}: {
+  provider: ProviderKind;
+  model: string;
+  systemPrompt: string;
+  userPrompt: string;
+  generationParams: Required<GenerationParams>;
+  streamingMode?: boolean;
+  continuationText?: string;
+}) {
   switch (provider) {
     case "openai":
     case "openrouter":
       return {
         model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
+        temperature: generationParams.temperature,
+        top_p: generationParams.topP,
+        max_tokens: generationParams.maxTokens,
+        ...(streamingMode ? { stream: true } : {}),
+        messages: createOpenAiCompatibleMessages(
+          systemPrompt,
+          userPrompt,
+          continuationText,
+        ),
       };
     case "anthropic":
       return {
         model,
-        max_tokens: 1200,
+        max_tokens: generationParams.maxTokens,
+        temperature: generationParams.temperature,
+        top_p: generationParams.topP,
+        ...(streamingMode ? { stream: true } : {}),
         system: systemPrompt,
-        messages: [{ role: "user", content: userPrompt }],
+        messages: createAnthropicMessages(userPrompt, continuationText),
       };
     case "gemini":
       return {
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }],
-          },
-        ],
+        generationConfig: {
+          temperature: generationParams.temperature,
+          topP: generationParams.topP,
+          maxOutputTokens: generationParams.maxTokens,
+        },
+        contents: createGeminiContents(systemPrompt, userPrompt, continuationText),
       };
   }
+}
+
+function normalizeGenerationParams(
+  value: GenerationParams | undefined,
+  fallback: Required<GenerationParams>,
+): Required<GenerationParams> {
+  return {
+    temperature: numberInRange(value?.temperature, 0, 2) ?? fallback.temperature,
+    topP: numberInRange(value?.topP, 0, 1) ?? fallback.topP,
+    maxTokens:
+      integerInRange(value?.maxTokens, 1, 128000) ?? fallback.maxTokens,
+  };
+}
+
+function createOpenAiCompatibleMessages(
+  systemPrompt: string,
+  userPrompt: string,
+  continuationText?: string,
+) {
+  const messages = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: userPrompt },
+  ];
+
+  if (continuationText?.trim()) {
+    messages.push(
+      { role: "assistant", content: continuationText },
+      { role: "user", content: continuationPrompt() },
+    );
+  }
+
+  return messages;
+}
+
+function createAnthropicMessages(userPrompt: string, continuationText?: string) {
+  const messages = [{ role: "user", content: userPrompt }];
+
+  if (continuationText?.trim()) {
+    messages.push(
+      { role: "assistant", content: continuationText },
+      { role: "user", content: continuationPrompt() },
+    );
+  }
+
+  return messages;
+}
+
+function createGeminiContents(
+  systemPrompt: string,
+  userPrompt: string,
+  continuationText?: string,
+) {
+  const contents = [
+    {
+      role: "user",
+      parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }],
+    },
+  ];
+
+  if (continuationText?.trim()) {
+    contents.push(
+      { role: "model", parts: [{ text: continuationText }] },
+      { role: "user", parts: [{ text: continuationPrompt() }] },
+    );
+  }
+
+  return contents;
+}
+
+function continuationPrompt() {
+  return [
+    "Continue exactly where the previous response stopped.",
+    "Do not restart, summarize, apologize, or repeat completed content.",
+    "Return only the continuation in the same format.",
+  ].join("\n");
+}
+
+function numberInRange(value: unknown, min: number, max: number) {
+  return typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= min &&
+    value <= max
+    ? value
+    : undefined;
+}
+
+function integerInRange(value: unknown, min: number, max: number) {
+  return typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= min &&
+    value <= max
+    ? value
+    : undefined;
 }
 
 function isForbiddenSecretKey(key: string) {
