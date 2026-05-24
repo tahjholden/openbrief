@@ -2969,7 +2969,7 @@ function TranscriptActionPanel({
             <TooltipContent side="bottom">
               {isReviewing
                 ? t("workbench.transcript.review.running")
-                : t("workbench.transcript.review")}
+                : t("workbench.transcript.review.tooltip")}
             </TooltipContent>
           </Tooltip>
           <Tooltip>
@@ -2998,7 +2998,7 @@ function TranscriptActionPanel({
             <TooltipContent side="bottom">
               {isTranslating
                 ? t("workbench.transcript.translate.running")
-                : t("workbench.transcript.translate")}
+                : t("workbench.transcript.translate.tooltip")}
             </TooltipContent>
           </Tooltip>
           <Tooltip>
@@ -3018,7 +3018,7 @@ function TranscriptActionPanel({
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
-              {t("workbench.transcript.overlay")}
+              {t("workbench.transcript.overlay.tooltip")}
             </TooltipContent>
           </Tooltip>
         </div>

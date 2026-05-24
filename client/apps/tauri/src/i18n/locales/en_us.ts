@@ -231,9 +231,15 @@ export const en_us = {
   "workbench.transcript.variant.original": "Original transcript",
   "workbench.transcript.variant.reviewed": "Reviewed transcript",
   "workbench.transcript.review": "Review",
+  "workbench.transcript.review.tooltip":
+    "Proofread and improve the transcription",
   "workbench.transcript.review.running": "Reviewing...",
   "workbench.transcript.translate": "Translate",
+  "workbench.transcript.translate.tooltip":
+    "Translate the transcript to a new language",
   "workbench.transcript.overlay": "Overlay",
+  "workbench.transcript.overlay.tooltip":
+    "Open the transcription in a separate overlay window",
   "workbench.transcript.voiceCloneSelection":
     "Voice clone reference blocks: {count}/3",
   "workbench.transcript.voiceCloneToggle":

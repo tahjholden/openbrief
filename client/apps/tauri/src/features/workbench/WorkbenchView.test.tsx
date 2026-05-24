@@ -428,22 +428,33 @@ describe("WorkbenchView", () => {
       />,
     );
 
-    const reviewLabelCount = screen.getAllByText("Review").length;
     fireEvent.focus(screen.getByRole("button", { name: /^review$/i }));
-    expect((await screen.findAllByText("Review")).length).toBeGreaterThan(
-      reviewLabelCount,
-    );
+    expect(
+      await screen.findAllByText("Proofread and improve the transcription"),
+    ).not.toHaveLength(0);
 
-    const translateLabelCount = screen.getAllByText("Translate").length;
+    fireEvent.blur(screen.getByRole("button", { name: /^review$/i }));
     fireEvent.focus(screen.getByRole("button", { name: /^translate$/i }));
-    expect((await screen.findAllByText("Translate")).length).toBeGreaterThan(
-      translateLabelCount,
-    );
+    expect(
+      await screen.findAllByText("Translate the transcript to a new language"),
+    ).not.toHaveLength(0);
 
-    const overlayLabelCount = screen.getAllByText("Overlay").length;
+    fireEvent.blur(screen.getByRole("button", { name: /^translate$/i }));
     fireEvent.focus(screen.getByRole("button", { name: /^overlay$/i }));
-    expect((await screen.findAllByText("Overlay")).length).toBeGreaterThan(
-      overlayLabelCount,
+    expect(
+      await screen.findAllByText(
+        "Open the transcription in a separate overlay window",
+      ),
+    ).not.toHaveLength(0);
+
+    expect(screen.getByRole("button", { name: /^review$/i })).toHaveTextContent(
+      "Review",
+    );
+    expect(
+      screen.getByRole("button", { name: /^translate$/i }),
+    ).toHaveTextContent("Translate");
+    expect(screen.getByRole("button", { name: /^overlay$/i })).toHaveTextContent(
+      "Overlay",
     );
   });
 
