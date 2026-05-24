@@ -29,6 +29,7 @@ import type {
   PodcastSourceKind,
   PodcastSpeakerConfig,
 } from "@/domain/podcast";
+import type { QuizMode } from "@/domain/quiz";
 import type { TranscriptLanguageOption } from "@/domain/transcript-actions";
 import type { SetupDialogMode } from "@/features/setup/SetupDialog";
 import type { TranslationKey } from "@/i18n";
@@ -282,6 +283,9 @@ export function AppShell() {
     selectedPodcast,
     selectedPodcastHistory,
     selectedPodcastJob,
+    selectedQuiz,
+    selectedQuizHistory,
+    selectedQuizJob,
     selectedChatMessages,
     importLocalFile,
     importYoutubeUrl,
@@ -291,6 +295,7 @@ export function AppShell() {
     extractTranscript,
     generateSummary,
     generatePodcast,
+    generateQuiz,
     deletePodcast,
     sendChat,
     resetChatSession,
@@ -1725,6 +1730,33 @@ export function AppShell() {
     }
   }
 
+  async function generateQuizFromWorkbench(request: {
+    mode: QuizMode;
+    questionCount: number;
+    areaOfInterest: string;
+  }) {
+    if (!selectedVideo) return;
+
+    try {
+      await generateQuiz({
+        videoId: selectedVideo.id,
+        provider: aiProviderPreferences.summary.provider,
+        model: aiProviderPreferences.summary.model,
+        mode: request.mode,
+        questionCount: request.questionCount,
+        areaOfInterest: request.areaOfInterest,
+        transcript: renderedTranscriptForSelectedVideo(),
+        summaryId: activeSummary?.id,
+      });
+    } catch (error) {
+      setAppNotice(
+        t("notice.quiz.failed", {
+          message: caughtErrorMessage(error, "quiz_generation_failed"),
+        }),
+      );
+    }
+  }
+
   function renderedTranscriptForSelectedVideo() {
     const activeVariant = selectedTranscriptVariants.find(
       (variant) => variant.id === activeTranscriptVariantId,
@@ -2112,6 +2144,9 @@ export function AppShell() {
           podcastHistory={selectedPodcastHistory}
           podcastJob={selectedPodcastJob}
           podcastAudioUrl={selectedPodcastAudioUrl}
+          quiz={selectedQuiz}
+          quizHistory={selectedQuizHistory}
+          quizJob={selectedQuizJob}
           chatMessages={selectedChatMessages}
           onAddVideo={openAddVideoDialog}
           onSelectVideoTab={setSelectedVideoId}
@@ -2185,6 +2220,7 @@ export function AppShell() {
           }
           onReadChatMessage={readChatMessageWithSupertonic}
           onGeneratePodcast={generatePodcastFromWorkbench}
+          onGenerateQuiz={generateQuizFromWorkbench}
           onPlayPodcast={playPodcast}
           onDownloadPodcastAudio={downloadPodcastAudio}
           onDownloadPodcastScript={downloadPodcastScript}

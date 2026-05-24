@@ -6,6 +6,7 @@ import type {
   VideoAsset,
 } from "@/domain/media-library";
 import type { PodcastDocument } from "@/domain/podcast";
+import type { QuizDocument } from "@/domain/quiz";
 import type { AiGenerationJob } from "@/hooks/useMediaLibrary";
 import type { ComponentProps } from "react";
 import {
@@ -183,6 +184,57 @@ describe("WorkbenchView", () => {
 
     audioPlay.mockRestore();
     audioPause.mockRestore();
+  });
+
+  it("renders quiz controls and submits the requested quiz shape", async () => {
+    const onGenerateQuiz = vi.fn().mockResolvedValue(undefined);
+    render(
+      <WorkbenchView
+        {...defaultProps({
+          transcript: transcriptFixture,
+          summary: summaryFixture,
+          onGenerateQuiz,
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Quiz" }));
+    fireEvent.click(screen.getByRole("button", { name: /generate quiz/i }));
+
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("Questions"), {
+      target: { value: "8" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Area of interest"), {
+      target: { value: "retrieval practice" },
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /generate quiz/i }),
+    );
+
+    await waitFor(() => expect(onGenerateQuiz).toHaveBeenCalledTimes(1));
+    expect(onGenerateQuiz).toHaveBeenCalledWith({
+      mode: "multiple-choice",
+      questionCount: 8,
+      areaOfInterest: "retrieval practice",
+    });
+  });
+
+  it("shows generated quiz questions in the quiz tab", () => {
+    render(
+      <WorkbenchView
+        {...defaultProps({
+          quiz: quizFixture,
+          quizHistory: [quizFixture],
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Quiz" }));
+
+    expect(screen.getByText("Workbench quiz")).toBeInTheDocument();
+    expect(screen.getByText("What is the key point?")).toBeInTheDocument();
+    expect(screen.getByText("The summary is grounded")).toBeInTheDocument();
   });
 
   it("limits voice clone transcript selection to three contiguous blocks", () => {
@@ -2128,6 +2180,31 @@ const podcastFixture: PodcastDocument = {
   ],
   durationSeconds: 24,
   sizeBytes: 1024,
+};
+
+const quizFixture: QuizDocument = {
+  schemaVersion: 1,
+  id: "quiz-video-1",
+  sourceAssetId: "video-1",
+  mode: "multiple-choice",
+  questionCount: 1,
+  areaOfInterest: "key points",
+  provider: "openai",
+  model: "gpt-5.4-mini",
+  createdAtIso: "2026-05-21T00:03:00.000Z",
+  title: "Workbench quiz",
+  description: "A focused quiz.",
+  items: [
+    {
+      id: "question-0001",
+      type: "multiple-choice",
+      question: "What is the key point?",
+      options: ["The summary is grounded", "The source is ignored"],
+      correctOptionIndex: 0,
+      explanation: "The quiz is based on the current media.",
+    },
+  ],
+  artifactPath: "videos/video-1/quiz/quiz-video-1/quiz.json",
 };
 
 const summaryJobFixture: AiGenerationJob = {

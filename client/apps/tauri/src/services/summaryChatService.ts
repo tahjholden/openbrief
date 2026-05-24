@@ -29,6 +29,14 @@ import {
   type PodcastSpeakerConfig,
 } from "@/domain/podcast";
 import {
+  createQuizDocument,
+  createQuizPrompt,
+  parseQuizJson,
+  validateQuizResponse,
+  type QuizDocument,
+  type QuizMode,
+} from "@/domain/quiz";
+import {
   createSummaryDocument,
   createSummaryPrompt,
   type SummaryLengthMode,
@@ -53,6 +61,7 @@ export type SummaryChatService = {
   generatePodcastScript(
     request: GeneratePodcastScriptRequest,
   ): Promise<PodcastScriptDocument>;
+  generateQuiz(request: GenerateQuizRequest): Promise<QuizDocument>;
   sendChat(request: SendChatRequest): Promise<ChatMessage[]>;
   reviewTranscript(request: TranscriptReviewRequest): Promise<TranscriptSegment[]>;
   translateTranscript(request: TranscriptTranslationRequest): Promise<TranscriptVariant>;
@@ -100,6 +109,18 @@ export type GeneratePodcastScriptRequest = {
   speakers: [PodcastSpeakerConfig, PodcastSpeakerConfig];
   provider: ProviderKind;
   model?: string;
+};
+
+export type GenerateQuizRequest = {
+  video: VideoAsset;
+  transcript: TranscriptSegment[];
+  summary?: SummaryDocument;
+  mode: QuizMode;
+  questionCount: number;
+  areaOfInterest: string;
+  provider: ProviderKind;
+  model?: string;
+  nowIso?: string;
 };
 
 export type MarkdownSaveRequest = {
@@ -194,6 +215,42 @@ export function createSummaryChatService(
       return validatePodcastScriptResponse(parsePodcastScriptJson(result.text), {
         video: request.video,
         speakers: request.speakers,
+      });
+    },
+
+    async generateQuiz(request) {
+      const generationSettings = getGenerationSettings();
+      const prompt = createQuizPrompt(request);
+      const result = await providerService.complete({
+        provider: request.provider,
+        operation: "quiz",
+        systemPrompt: prompt.systemPrompt,
+        userPrompt: prompt.userPrompt,
+        model: request.model,
+        generationParams: generationSettings.quiz,
+      });
+
+      if (!result.ok) {
+        throw new Error(result.message);
+      }
+
+      const quiz = validateQuizResponse(parseQuizJson(result.text), {
+        video: request.video,
+        mode: request.mode,
+        questionCount: request.questionCount,
+        areaOfInterest: request.areaOfInterest,
+      });
+
+      return createQuizDocument({
+        video: request.video,
+        mode: request.mode,
+        questionCount: request.questionCount,
+        areaOfInterest: request.areaOfInterest,
+        provider: request.provider,
+        model: request.model,
+        quiz,
+        sourceSummaryId: request.summary?.id,
+        nowIso: request.nowIso,
       });
     },
 

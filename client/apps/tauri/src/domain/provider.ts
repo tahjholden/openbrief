@@ -4,6 +4,7 @@ export type ProviderOperation =
   | "summary"
   | "chat"
   | "podcast_script"
+  | "quiz"
   | "transcript_review"
   | "transcript_translate";
 
@@ -85,6 +86,7 @@ export const defaultGenerationParamsByOperation: Record<
   summary: { temperature: 0.3, topP: 0.9, maxTokens: 4096 },
   chat: { temperature: 0.2, topP: 0.9, maxTokens: 2048 },
   podcast_script: { temperature: 0.55, topP: 0.95, maxTokens: 4096 },
+  quiz: { temperature: 0.35, topP: 0.9, maxTokens: 4096 },
   transcript_review: { temperature: 0.1, topP: 0.9, maxTokens: 4096 },
   transcript_translate: { temperature: 0.1, topP: 0.9, maxTokens: 4096 },
 };

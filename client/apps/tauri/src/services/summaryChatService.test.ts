@@ -213,6 +213,18 @@ describe("summary chat service", () => {
                     { speakerId: "B", text: "Closing thought" },
                   ],
                 })
+              : request.operation === "quiz"
+                ? JSON.stringify({
+                    title: "Quiz",
+                    description: "Description",
+                    items: [
+                      {
+                        question: "What happened?",
+                        options: ["Intro", "Outro"],
+                        correctOptionIndex: 0,
+                      },
+                    ],
+                  })
               : request.operation === "transcript_translate"
                 ? "s1\t0:00\t번역된 인트로"
                 : request.operation === "transcript_review"
@@ -229,6 +241,7 @@ describe("summary chat service", () => {
       summary: { temperature: 0.31, topP: 0.81, maxTokens: 1111 },
       chat: { temperature: 0.32, topP: 0.82, maxTokens: 2222 },
       podcast_script: { temperature: 0.33, topP: 0.83, maxTokens: 3333 },
+      quiz: { temperature: 0.36, topP: 0.86, maxTokens: 6666 },
       transcript_review: { temperature: 0.34, topP: 0.84, maxTokens: 4444 },
       transcript_translate: { temperature: 0.35, topP: 0.85, maxTokens: 5555 },
     };
@@ -260,6 +273,15 @@ describe("summary chat service", () => {
       ],
       provider: "openai",
     });
+    await service.generateQuiz({
+      video,
+      transcript,
+      summary,
+      mode: "multiple-choice",
+      questionCount: 1,
+      areaOfInterest: "intro",
+      provider: "openai",
+    });
     await service.reviewTranscript({ video, transcript, provider: "openai" });
     await service.translateTranscript({
       video,
@@ -272,6 +294,7 @@ describe("summary chat service", () => {
       ["summary", generationSettings.summary],
       ["chat", generationSettings.chat],
       ["podcast_script", generationSettings.podcast_script],
+      ["quiz", generationSettings.quiz],
       ["transcript_review", generationSettings.transcript_review],
       ["transcript_translate", generationSettings.transcript_translate],
     ]);

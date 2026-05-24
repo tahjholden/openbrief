@@ -57,6 +57,7 @@ function normalizeGenerationSettings(value: unknown): GenerationSettings {
       candidate.podcast_script,
       "podcast_script",
     ),
+    quiz: normalizeGenerationParams(candidate.quiz, "quiz"),
     transcript_review: normalizeGenerationParams(
       candidate.transcript_review,
       "transcript_review",

@@ -26,6 +26,7 @@ export type ArtifactKind =
   | "transcript"
   | "summary"
   | "chat"
+  | "quiz"
   | "export"
   | "outline"
   | "visual-frame";

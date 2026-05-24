@@ -16,6 +16,12 @@ import type {
   PodcastSpeakerConfig,
 } from "@/domain/podcast";
 import type {
+  MultipleChoiceQuizItem,
+  QuizDocument,
+  QuizGenerationJob,
+  QuizMode,
+} from "@/domain/quiz";
+import type {
   SummaryLengthMode,
   SummaryOutputLanguageOption,
   VideoSummaryTemplateId,
@@ -129,7 +135,7 @@ import {
   TooltipTrigger,
 } from "@acme/ui/tooltip";
 
-type BriefMode = "summary" | "podcast";
+type BriefMode = "summary" | "podcast" | "quiz";
 
 type WorkbenchViewProps = {
   video?: VideoAsset;
@@ -148,6 +154,9 @@ type WorkbenchViewProps = {
   podcastHistory?: PodcastDocument[];
   podcastJob?: PodcastGenerationJob;
   podcastAudioUrl?: string;
+  quiz?: QuizDocument;
+  quizHistory?: QuizDocument[];
+  quizJob?: QuizGenerationJob;
   chatMessages: ChatMessage[];
   onAddVideo?(): void;
   onSelectVideoTab?(videoId: string): void;
@@ -190,6 +199,11 @@ type WorkbenchViewProps = {
     outputLanguage?: string;
     speakers: [PodcastSpeakerConfig, PodcastSpeakerConfig];
     languageCode: TtsLanguageCode;
+  }): Promise<unknown>;
+  onGenerateQuiz?(request: {
+    mode: QuizMode;
+    questionCount: number;
+    areaOfInterest: string;
   }): Promise<unknown>;
   onPlayPodcast?(podcast: PodcastDocument): Promise<unknown> | unknown;
   onDownloadPodcastAudio?(podcast: PodcastDocument): Promise<unknown> | unknown;
@@ -254,6 +268,9 @@ export function WorkbenchView({
   podcastHistory = [],
   podcastJob,
   podcastAudioUrl,
+  quiz,
+  quizHistory = [],
+  quizJob,
   chatMessages,
   onAddVideo,
   onSelectVideoTab,
@@ -268,6 +285,7 @@ export function WorkbenchView({
   onSendChat,
   onReadChatMessage,
   onGeneratePodcast,
+  onGenerateQuiz,
   onPlayPodcast,
   onDownloadPodcastAudio,
   onDownloadPodcastScript,
@@ -315,9 +333,14 @@ export function WorkbenchView({
   const [isPodcastAudioPlaying, setIsPodcastAudioPlaying] = useState(false);
   const [podcastSourceKind, setPodcastSourceKind] =
     useState<PodcastSourceKind>("current-summary");
+  const [quizMode, setQuizMode] = useState<QuizMode>("multiple-choice");
+  const [quizQuestionCount, setQuizQuestionCount] = useState(5);
+  const [quizAreaOfInterest, setQuizAreaOfInterest] = useState("");
   const [isSummaryGenerateDialogOpen, setIsSummaryGenerateDialogOpen] =
     useState(false);
   const [isPodcastGenerateDialogOpen, setIsPodcastGenerateDialogOpen] =
+    useState(false);
+  const [isQuizGenerateDialogOpen, setIsQuizGenerateDialogOpen] =
     useState(false);
   const [briefMode, setBriefMode] = useState<BriefMode>("summary");
   const [contextMode, setContextMode] = useState<ChatContextMode>("summary");
@@ -359,6 +382,7 @@ export function WorkbenchView({
   const isSummarizing = summaryJob?.status === "running";
   const isSendingChat = chatJob?.status === "running";
   const isGeneratingPodcast = podcastJob?.status === "running";
+  const isGeneratingQuiz = quizJob?.status === "running";
   const summaryProviderConfig = onSummaryProviderPreferenceChange
     ? {
         provider: summaryProvider,
@@ -382,6 +406,7 @@ export function WorkbenchView({
   const briefModeOptions = [
     { value: "summary" as const, label: t("workbench.brief.summary") },
     { value: "podcast" as const, label: t("workbench.brief.podcast") },
+    { value: "quiz" as const, label: t("workbench.brief.quiz") },
   ];
 
   useEffect(() => {
@@ -709,6 +734,17 @@ export function WorkbenchView({
   function submitPodcastGeneration() {
     setIsPodcastGenerateDialogOpen(false);
     void generatePodcast().catch(() => {});
+  }
+
+  function submitQuizGeneration() {
+    if (!onGenerateQuiz || isGeneratingQuiz) return;
+
+    setIsQuizGenerateDialogOpen(false);
+    void onGenerateQuiz({
+      mode: quizMode,
+      questionCount: quizQuestionCount,
+      areaOfInterest: quizAreaOfInterest.trim(),
+    }).catch(() => {});
   }
 
   function togglePodcastAudioPlayback(currentPodcast: PodcastDocument) {
@@ -1292,6 +1328,24 @@ export function WorkbenchView({
                     onDeletePodcast={onDeletePodcast}
                   />
                 ) : null}
+                {briefMode === "quiz" && quiz ? (
+                  <QuizGenerateDialog
+                    open={isQuizGenerateDialogOpen}
+                    mode={quizMode}
+                    questionCount={quizQuestionCount}
+                    areaOfInterest={quizAreaOfInterest}
+                    quizHistoryCount={quizHistory.length}
+                    canGenerate={Boolean(onGenerateQuiz && video)}
+                    hasSource={Boolean(activeSummary || renderedTranscript.length > 0)}
+                    isGenerating={isGeneratingQuiz}
+                    triggerVariant="outline"
+                    onOpenChange={setIsQuizGenerateDialogOpen}
+                    onModeChange={setQuizMode}
+                    onQuestionCountChange={setQuizQuestionCount}
+                    onAreaOfInterestChange={setQuizAreaOfInterest}
+                    onGenerate={submitQuizGeneration}
+                  />
+                ) : null}
               </div>
             </CardHeader>
             <CardContent className="flex min-h-0 flex-1 flex-col gap-3">
@@ -1368,7 +1422,7 @@ export function WorkbenchView({
                     ) : null}
                   </div>
                 </>
-              ) : (
+              ) : briefMode === "podcast" ? (
                 <PodcastBriefPanel
                   podcast={podcast}
                   podcastHistory={podcastHistory}
@@ -1403,6 +1457,30 @@ export function WorkbenchView({
                   onAudioSeeking={handlePodcastAudioSeeking}
                   onAudioSeeked={handlePodcastAudioSeeked}
                   onAudioEnded={handlePodcastAudioEnded}
+                />
+              ) : (
+                <QuizBriefPanel
+                  quiz={quiz}
+                  quizHistory={quizHistory}
+                  quizJob={quizJob}
+                  hasSource={Boolean(activeSummary || renderedTranscript.length > 0)}
+                  generateAction={
+                    <QuizGenerateDialog
+                      open={isQuizGenerateDialogOpen}
+                      mode={quizMode}
+                      questionCount={quizQuestionCount}
+                      areaOfInterest={quizAreaOfInterest}
+                      quizHistoryCount={quizHistory.length}
+                      canGenerate={Boolean(onGenerateQuiz && video)}
+                      hasSource={Boolean(activeSummary || renderedTranscript.length > 0)}
+                      isGenerating={isGeneratingQuiz}
+                      onOpenChange={setIsQuizGenerateDialogOpen}
+                      onModeChange={setQuizMode}
+                      onQuestionCountChange={setQuizQuestionCount}
+                      onAreaOfInterestChange={setQuizAreaOfInterest}
+                      onGenerate={submitQuizGeneration}
+                    />
+                  }
                 />
               )}
             </CardContent>
@@ -1923,6 +2001,315 @@ function PodcastBriefPanel({
       </div>
     </div>
   );
+}
+
+function QuizBriefPanel({
+  quiz,
+  quizHistory,
+  quizJob,
+  hasSource,
+  generateAction,
+}: {
+  quiz?: QuizDocument;
+  quizHistory: QuizDocument[];
+  quizJob?: QuizGenerationJob;
+  hasSource: boolean;
+  generateAction: ReactNode;
+}) {
+  const { t } = useI18n();
+
+  if (!quiz && !quizJob) {
+    return (
+      <BriefEmptyState
+        action={generateAction}
+        description={
+          hasSource
+            ? t("workbench.quiz.empty")
+            : t("workbench.quiz.sourceRequired")
+        }
+      />
+    );
+  }
+
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="grid gap-4 pb-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <Sparkles className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="font-medium">{t("workbench.quiz.title")}</span>
+            {quizHistory.length > 1 ? (
+              <span className="text-muted-foreground text-xs">
+                {t("workbench.quiz.history", {
+                  count: quizHistory.length,
+                })}
+              </span>
+            ) : null}
+          </div>
+          {quizJob ? (
+            <span className="text-muted-foreground text-xs">
+              {quizJob.status === "running"
+                ? t("workbench.quiz.generating")
+                : t("workbench.quiz.failed")}
+            </span>
+          ) : null}
+        </div>
+        {quiz ? (
+          <div className="grid gap-3">
+            <div className="rounded-md border bg-muted/20 px-3 py-2">
+              <div className="font-medium">{quiz.title}</div>
+              <div className="text-muted-foreground mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                <span>{t(quizModeLabelKey(quiz.mode))}</span>
+                <span>
+                  {t("workbench.quiz.questions", {
+                    count: quiz.items.length,
+                  })}
+                </span>
+                {quiz.areaOfInterest ? <span>{quiz.areaOfInterest}</span> : null}
+              </div>
+              {quiz.description ? (
+                <p className="text-muted-foreground mt-2 text-sm">
+                  {quiz.description}
+                </p>
+              ) : null}
+            </div>
+            <ol className="grid gap-3">
+              {quiz.items.map((item, index) => (
+                <li key={item.id}>
+                  {item.type === "multiple-choice" ? (
+                    <MultipleChoiceQuizCard item={item} index={index} />
+                  ) : (
+                    <FlashCardQuizCard item={item} index={index} />
+                  )}
+                </li>
+              ))}
+            </ol>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function MultipleChoiceQuizCard({
+  item,
+  index,
+}: {
+  item: MultipleChoiceQuizItem;
+  index: number;
+}) {
+  return (
+    <div className="rounded-md border px-3 py-3 text-sm">
+      <div className="mb-3 flex gap-2 font-medium">
+        <span className="text-muted-foreground shrink-0">
+          {index + 1}.
+        </span>
+        <span>{item.question}</span>
+      </div>
+      <ol className="grid gap-2">
+        {item.options.map((option, optionIndex) => {
+          const isCorrect = optionIndex === item.correctOptionIndex;
+
+          return (
+            <li
+              key={`${item.id}-${optionIndex}`}
+              className={cn(
+                "flex items-start gap-2 rounded-md border px-2 py-1.5",
+                isCorrect
+                  ? "border-emerald-300 bg-emerald-50 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100"
+                  : "bg-muted/20",
+              )}
+            >
+              <span className="text-muted-foreground shrink-0">
+                {String.fromCharCode(65 + optionIndex)}
+              </span>
+              <span className="min-w-0 flex-1">{option}</span>
+              {isCorrect ? (
+                <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
+              ) : null}
+            </li>
+          );
+        })}
+      </ol>
+      {item.explanation ? (
+        <p className="text-muted-foreground mt-3 text-xs leading-relaxed">
+          {item.explanation}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function FlashCardQuizCard({
+  item,
+  index,
+}: {
+  item: Exclude<QuizDocument["items"][number], MultipleChoiceQuizItem>;
+  index: number;
+}) {
+  return (
+    <div className="grid gap-2 rounded-md border px-3 py-3 text-sm">
+      <div className="flex gap-2 font-medium">
+        <span className="text-muted-foreground shrink-0">
+          {index + 1}.
+        </span>
+        <span>{item.front}</span>
+      </div>
+      <div className="rounded-md bg-muted/50 px-3 py-2 leading-relaxed">
+        {item.back}
+      </div>
+      {item.explanation ? (
+        <p className="text-muted-foreground text-xs leading-relaxed">
+          {item.explanation}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function QuizGenerateDialog({
+  open,
+  mode,
+  questionCount,
+  areaOfInterest,
+  quizHistoryCount,
+  canGenerate,
+  hasSource,
+  isGenerating,
+  triggerVariant = "default",
+  onOpenChange,
+  onModeChange,
+  onQuestionCountChange,
+  onAreaOfInterestChange,
+  onGenerate,
+}: {
+  open: boolean;
+  mode: QuizMode;
+  questionCount: number;
+  areaOfInterest: string;
+  quizHistoryCount: number;
+  canGenerate: boolean;
+  hasSource: boolean;
+  isGenerating: boolean;
+  triggerVariant?: "default" | "outline" | "ghost";
+  onOpenChange(open: boolean): void;
+  onModeChange(mode: QuizMode): void;
+  onQuestionCountChange(count: number): void;
+  onAreaOfInterestChange(areaOfInterest: string): void;
+  onGenerate(): void;
+}) {
+  const { t } = useI18n();
+  const normalizedQuestionCount = Math.min(
+    50,
+    Math.max(1, Math.trunc(questionCount || 1)),
+  );
+  const submitDisabled = !canGenerate || !hasSource || isGenerating;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogTrigger asChild>
+        <Button
+          type="button"
+          variant={triggerVariant}
+          disabled={!canGenerate || isGenerating}
+        >
+          {isGenerating ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <Sparkles className="mr-2 h-4 w-4" aria-hidden="true" />
+          )}
+          {isGenerating
+            ? t("workbench.quiz.generating")
+            : t("workbench.quiz.generate")}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{t("workbench.quiz.generate")}</DialogTitle>
+          <DialogDescription>
+            {t("workbench.quiz.dialog.description")}
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          className="grid gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (submitDisabled) return;
+            onQuestionCountChange(normalizedQuestionCount);
+            onGenerate();
+          }}
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
+            <PodcastSelect
+              label={t("workbench.quiz.mode")}
+              value={mode}
+              options={[
+                {
+                  value: "multiple-choice",
+                  label: t("workbench.quiz.mode.multipleChoice"),
+                },
+                {
+                  value: "flash-card",
+                  label: t("workbench.quiz.mode.flashCard"),
+                },
+              ]}
+              onChange={(value) => onModeChange(value as QuizMode)}
+            />
+            <label className="text-muted-foreground grid gap-1 text-xs">
+              <span>{t("workbench.quiz.questionCount")}</span>
+              <Input
+                type="number"
+                min={1}
+                max={50}
+                value={questionCount}
+                onChange={(event) =>
+                  onQuestionCountChange(
+                    Math.min(
+                      50,
+                      Math.max(1, Math.trunc(event.currentTarget.valueAsNumber || 1)),
+                    ),
+                  )
+                }
+              />
+            </label>
+          </div>
+          <label className="text-muted-foreground grid gap-1 text-xs">
+            <span>{t("workbench.quiz.areaOfInterest")}</span>
+            <Textarea
+              value={areaOfInterest}
+              rows={3}
+              placeholder={t("workbench.quiz.areaOfInterest.placeholder")}
+              onChange={(event) =>
+                onAreaOfInterestChange(event.currentTarget.value)
+              }
+            />
+          </label>
+          {!hasSource ? (
+            <p className="text-muted-foreground text-xs">
+              {t("workbench.quiz.sourceRequired")}
+            </p>
+          ) : null}
+          {quizHistoryCount > 1 ? (
+            <p className="text-muted-foreground text-xs">
+              {t("workbench.quiz.history", { count: quizHistoryCount })}
+            </p>
+          ) : null}
+          <DialogFooter>
+            <Button type="submit" disabled={submitDisabled}>
+              <Bot className="mr-2 h-4 w-4" aria-hidden="true" />
+              {t("workbench.quiz.generate")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function quizModeLabelKey(mode: QuizMode): TranslationKey {
+  return mode === "flash-card"
+    ? "workbench.quiz.mode.flashCard"
+    : "workbench.quiz.mode.multipleChoice";
 }
 
 function SummaryGenerateDialog({

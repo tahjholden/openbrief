@@ -438,6 +438,10 @@ function createMockCompletionText(request: ProviderCompletionRequest) {
     return createMockPodcastScript();
   }
 
+  if (request.operation === "quiz") {
+    return createMockQuiz();
+  }
+
   return createMockChatReply(request.userPrompt);
 }
 
@@ -478,6 +482,37 @@ function createMockPodcastScript() {
       {
         speakerId: "B",
         text: "That makes this useful as a quick recap before returning to the original media.",
+      },
+    ],
+  });
+}
+
+function createMockQuiz() {
+  return JSON.stringify({
+    title: "OpenBrief quiz",
+    description: "A generated study quiz grounded in the current media.",
+    items: [
+      {
+        question: "What is the main purpose of this OpenBrief quiz?",
+        options: [
+          "To test recall from the selected source",
+          "To replace the source media",
+          "To configure provider credentials",
+          "To export audio files",
+        ],
+        correctOptionIndex: 0,
+        explanation: "The quiz is generated from the selected source material.",
+      },
+      {
+        question: "What should each answer be grounded in?",
+        options: [
+          "The supplied transcript or summary",
+          "Unrelated background knowledge",
+          "Provider account settings",
+          "The app release notes",
+        ],
+        correctOptionIndex: 0,
+        explanation: "Quiz generation is constrained to the provided source.",
       },
     ],
   });
