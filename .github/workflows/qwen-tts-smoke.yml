@@ -58,10 +58,10 @@ jobs:
         id: matrix
         shell: bash
         run: |
-          macos_arm64='{"name":"macos-arm64","os":"macos-latest","python":"3.11"}'
-          macos_intel='{"name":"macos-intel","os":"macos-15-intel","python":"3.10"}'
-          windows_x64='{"name":"windows-x64","os":"windows-2025-vs2026","python":"3.11"}'
-          linux_x64='{"name":"linux-x64","os":"ubuntu-22.04","python":"3.11"}'
+          macos_arm64='{"name":"macos-arm64","os":"macos-latest","python":"3.11","profile":"tts"}'
+          macos_intel='{"name":"macos-intel","os":"macos-15-intel","python":"3.10","profile":"smoke"}'
+          windows_x64='{"name":"windows-x64","os":"windows-2025-vs2026","python":"3.11","profile":"tts"}'
+          linux_x64='{"name":"linux-x64","os":"ubuntu-22.04","python":"3.11","profile":"tts"}'
 
           case "${{ inputs.platform }}" in
             all)
@@ -116,7 +116,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node client/apps/tauri/scripts/build-voicebox-sidecar.js --release --profile tts
+          node client/apps/tauri/scripts/build-voicebox-sidecar.js --release --profile "${{ matrix.profile }}"
           node --input-type=module <<'NODE' >> "$GITHUB_ENV"
           import { sidecarFileName, getHostTriple } from "./client/apps/tauri/scripts/setup-dev-sidecars.js";
           const targetTriple = getHostTriple();
