@@ -360,6 +360,34 @@ describe("WorkbenchView", () => {
     );
   });
 
+  it("shows tooltips for transcript action buttons", async () => {
+    render(
+      <WorkbenchView
+        {...defaultProps({
+          transcript: transcriptFixture,
+        })}
+      />,
+    );
+
+    const reviewLabelCount = screen.getAllByText("Review").length;
+    fireEvent.focus(screen.getByRole("button", { name: /^review$/i }));
+    expect((await screen.findAllByText("Review")).length).toBeGreaterThan(
+      reviewLabelCount,
+    );
+
+    const translateLabelCount = screen.getAllByText("Translate").length;
+    fireEvent.focus(screen.getByRole("button", { name: /^translate$/i }));
+    expect((await screen.findAllByText("Translate")).length).toBeGreaterThan(
+      translateLabelCount,
+    );
+
+    const overlayLabelCount = screen.getAllByText("Overlay").length;
+    fireEvent.focus(screen.getByRole("button", { name: /^overlay$/i }));
+    expect((await screen.findAllByText("Overlay")).length).toBeGreaterThan(
+      overlayLabelCount,
+    );
+  });
+
   it("shows original and translated transcript text together", () => {
     render(
       <WorkbenchView

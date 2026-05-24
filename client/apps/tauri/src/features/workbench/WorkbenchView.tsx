@@ -2885,61 +2885,88 @@ function TranscriptActionPanel({
           </SelectContent>
         </Select>
       </div>
-      <div className="openbrief-transcript-actions grid grid-cols-3 gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="openbrief-transcript-action-button min-w-0 gap-1.5"
-          disabled={isReviewing}
-          aria-label={
-            isReviewing
-              ? t("workbench.transcript.review.running")
-              : t("workbench.transcript.review")
-          }
-          onClick={onReview}
-        >
-          <Sparkles className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="openbrief-transcript-action-label truncate">
-            {isReviewing
-              ? t("workbench.transcript.review.running")
-              : t("workbench.transcript.review")}
-          </span>
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="openbrief-transcript-action-button min-w-0 gap-1.5"
-          disabled={isTranslating}
-          aria-label={
-            isTranslating
-              ? t("workbench.transcript.translate.running")
-              : t("workbench.transcript.translate")
-          }
-          onClick={onTranslate}
-        >
-          <Languages className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="openbrief-transcript-action-label truncate">
-            {isTranslating
-              ? t("workbench.transcript.translate.running")
-              : t("workbench.transcript.translate")}
-          </span>
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="openbrief-transcript-action-button min-w-0 gap-1.5"
-          aria-label={t("workbench.transcript.overlay")}
-          onClick={onOverlay}
-        >
-          <Eye className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="openbrief-transcript-action-label truncate">
-            {t("workbench.transcript.overlay")}
-          </span>
-        </Button>
-      </div>
+      <TooltipProvider delayDuration={150}>
+        <div className="openbrief-transcript-actions grid grid-cols-3 gap-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="openbrief-transcript-action-button min-w-0 gap-1.5"
+                disabled={isReviewing}
+                aria-label={
+                  isReviewing
+                    ? t("workbench.transcript.review.running")
+                    : t("workbench.transcript.review")
+                }
+                onClick={onReview}
+              >
+                <Sparkles className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="openbrief-transcript-action-label truncate">
+                  {isReviewing
+                    ? t("workbench.transcript.review.running")
+                    : t("workbench.transcript.review")}
+                </span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {isReviewing
+                ? t("workbench.transcript.review.running")
+                : t("workbench.transcript.review")}
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="openbrief-transcript-action-button min-w-0 gap-1.5"
+                disabled={isTranslating}
+                aria-label={
+                  isTranslating
+                    ? t("workbench.transcript.translate.running")
+                    : t("workbench.transcript.translate")
+                }
+                onClick={onTranslate}
+              >
+                <Languages className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="openbrief-transcript-action-label truncate">
+                  {isTranslating
+                    ? t("workbench.transcript.translate.running")
+                    : t("workbench.transcript.translate")}
+                </span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {isTranslating
+                ? t("workbench.transcript.translate.running")
+                : t("workbench.transcript.translate")}
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="openbrief-transcript-action-button min-w-0 gap-1.5"
+                aria-label={t("workbench.transcript.overlay")}
+                onClick={onOverlay}
+              >
+                <Eye className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="openbrief-transcript-action-label truncate">
+                  {t("workbench.transcript.overlay")}
+                </span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {t("workbench.transcript.overlay")}
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      </TooltipProvider>
       <Dialog
         open={translateDialogOpen}
         onOpenChange={onTranslateDialogOpenChange}
