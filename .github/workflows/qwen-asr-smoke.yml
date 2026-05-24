@@ -48,7 +48,7 @@ jobs:
         shell: bash
         run: |
           macos_arm64='{"name":"macos-arm64","os":"macos-latest","python":"3.11","profile":"asr"}'
-          macos_intel='{"name":"macos-intel","os":"macos-15-intel","python":"3.10","profile":"smoke"}'
+          macos_intel='{"name":"macos-intel","os":"macos-15-intel","python":"3.10","profile":"asr"}'
           windows_x64='{"name":"windows-x64","os":"windows-2025-vs2026","python":"3.11","profile":"asr"}'
           linux_x64='{"name":"linux-x64","os":"ubuntu-22.04","python":"3.11","profile":"asr"}'
 
@@ -88,6 +88,18 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+
+      - name: Install LLVM for macOS Intel native deps
+        if: matrix.name == 'macos-intel'
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install llvm@20
+          llvm_prefix="$(brew --prefix llvm@20)"
+          echo "${llvm_prefix}/bin" >> "$GITHUB_PATH"
+          echo "LLVM_CONFIG=${llvm_prefix}/bin/llvm-config" >> "$GITHUB_ENV"
+          echo "LLVM_DIR=${llvm_prefix}/lib/cmake/llvm" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=${llvm_prefix}" >> "$GITHUB_ENV"
 
       - name: Setup Python
         uses: actions/setup-python@v6
