@@ -1,6 +1,6 @@
+import { AppLayout } from "@/app/AppLayout";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { AppLayout } from "@/app/AppLayout";
 
 describe("AppLayout", () => {
   it("switches pages with modifier number shortcuts", () => {
@@ -17,13 +17,15 @@ describe("AppLayout", () => {
 
     fireEvent.keyDown(window, { key: "2", ctrlKey: true });
     fireEvent.keyDown(window, { key: "3", ctrlKey: true });
+    fireEvent.keyDown(window, { key: "4", ctrlKey: true });
     fireEvent.keyDown(window, { key: "0", metaKey: true });
     fireEvent.keyDown(window, { key: "1", ctrlKey: true });
 
     expect(onActiveViewChange).toHaveBeenNthCalledWith(1, "workbench");
     expect(onActiveViewChange).toHaveBeenNthCalledWith(2, "playlists");
-    expect(onActiveViewChange).toHaveBeenNthCalledWith(3, "settings");
-    expect(onActiveViewChange).toHaveBeenNthCalledWith(4, "finder");
+    expect(onActiveViewChange).toHaveBeenNthCalledWith(3, "voices");
+    expect(onActiveViewChange).toHaveBeenNthCalledWith(4, "settings");
+    expect(onActiveViewChange).toHaveBeenNthCalledWith(5, "finder");
   });
 
   it("runs the search shortcut with modifier l", () => {
@@ -77,8 +79,9 @@ describe("AppLayout", () => {
     );
 
     expect(screen.getByRole("heading")).toHaveClass("flex-1", "truncate");
-    expect(screen.getByRole("button", { name: "Open" }).parentElement)
-      .toHaveClass("shrink-0");
+    expect(
+      screen.getByRole("button", { name: "Open" }).parentElement,
+    ).toHaveClass("shrink-0");
   });
 
   it("shows shortcut tooltips when hovering sidebar menu items", async () => {
@@ -92,33 +95,49 @@ describe("AppLayout", () => {
       </AppLayout>,
     );
 
-    expect(screen.queryByRole("button", { name: "Shortcuts" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Shortcuts" }),
+    ).not.toBeInTheDocument();
 
-    fireEvent.focus(screen.getByRole("button", { name: /library.*(?:⌘|ctrl) \+ 1/i }));
+    fireEvent.focus(
+      screen.getByRole("button", { name: /library.*(?:⌘|ctrl) \+ 1/i }),
+    );
     expect(
       (await screen.findAllByLabelText(/(?:⌘|Ctrl) \+ 1/)).some(
         (element) => element.getAttribute("data-slot") === "kbd-group",
       ),
     ).toBe(true);
 
-    fireEvent.blur(screen.getByRole("button", { name: /library.*(?:⌘|ctrl) \+ 1/i }));
-    fireEvent.focus(screen.getByRole("button", { name: /note.*(?:⌘|ctrl) \+ 2/i }));
+    fireEvent.blur(
+      screen.getByRole("button", { name: /library.*(?:⌘|ctrl) \+ 1/i }),
+    );
+    fireEvent.focus(
+      screen.getByRole("button", { name: /note.*(?:⌘|ctrl) \+ 2/i }),
+    );
     expect(
       (await screen.findAllByLabelText(/(?:⌘|Ctrl) \+ 2/)).some(
         (element) => element.getAttribute("data-slot") === "kbd-group",
       ),
     ).toBe(true);
 
-    fireEvent.blur(screen.getByRole("button", { name: /note.*(?:⌘|ctrl) \+ 2/i }));
-    fireEvent.focus(screen.getByRole("button", { name: /playlists.*(?:⌘|ctrl) \+ 3/i }));
+    fireEvent.blur(
+      screen.getByRole("button", { name: /note.*(?:⌘|ctrl) \+ 2/i }),
+    );
+    fireEvent.focus(
+      screen.getByRole("button", { name: /playlist.*(?:⌘|ctrl) \+ 3/i }),
+    );
     expect(
       (await screen.findAllByLabelText(/(?:⌘|Ctrl) \+ 3/)).some(
         (element) => element.getAttribute("data-slot") === "kbd-group",
       ),
     ).toBe(true);
 
-    fireEvent.blur(screen.getByRole("button", { name: /playlists.*(?:⌘|ctrl) \+ 3/i }));
-    fireEvent.focus(screen.getByRole("button", { name: /settings.*(?:⌘|ctrl) \+ 0/i }));
+    fireEvent.blur(
+      screen.getByRole("button", { name: /playlist.*(?:⌘|ctrl) \+ 3/i }),
+    );
+    fireEvent.focus(
+      screen.getByRole("button", { name: /settings.*(?:⌘|ctrl) \+ 0/i }),
+    );
     expect(
       (await screen.findAllByLabelText(/(?:⌘|Ctrl) \+ 0/)).some(
         (element) => element.getAttribute("data-slot") === "kbd-group",

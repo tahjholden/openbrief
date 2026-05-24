@@ -1,4 +1,11 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type {
@@ -30,6 +37,11 @@ describe("WorkbenchView", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /generate podcast/i }));
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: /generate podcast/i,
+      }),
+    );
 
     await waitFor(() => expect(onGeneratePodcast).toHaveBeenCalledTimes(1));
     expect(onGeneratePodcast).toHaveBeenCalledWith(
@@ -348,7 +360,12 @@ describe("WorkbenchView", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /summarize/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^summarize$/i }));
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: /^summarize$/i,
+      }),
+    );
 
     await waitFor(() =>
       expect(onGenerateSummary).toHaveBeenCalledWith(
@@ -673,12 +690,17 @@ describe("WorkbenchView", () => {
     fireEvent.click(screen.getByRole("button", { name: /extract transcript/i }));
     await waitFor(() => expect(onExtractTranscript).toHaveBeenCalled());
 
+    fireEvent.click(screen.getByRole("button", { name: /^summarize$/i }));
     fireEvent.keyDown(screen.getByRole("combobox", { name: "Summary language" }), {
       key: "Enter",
       code: "Enter",
     });
     fireEvent.click(await screen.findByRole("option", { name: "Korean" }));
-    fireEvent.click(screen.getByRole("button", { name: /summarize/i }));
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: /^summarize$/i,
+      }),
+    );
     await waitFor(() =>
       expect(onGenerateSummary).toHaveBeenCalledWith(
         "openai",
@@ -795,7 +817,12 @@ describe("WorkbenchView", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /summarize/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^summarize$/i }));
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: /^summarize$/i,
+      }),
+    );
     await waitFor(() =>
       expect(onGenerateSummary).toHaveBeenCalledWith(
         "anthropic",
@@ -843,7 +870,12 @@ describe("WorkbenchView", () => {
     );
     fireEvent.click(screen.getByRole("switch", { name: /streaming mode/i }));
     fireEvent.click(screen.getByRole("button", { name: /^close$/i }));
-    fireEvent.click(screen.getByRole("button", { name: /summarize/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^summarize$/i }));
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: /^summarize$/i,
+      }),
+    );
 
     await waitFor(() =>
       expect(onGenerateSummary).toHaveBeenCalledWith(
@@ -892,7 +924,12 @@ describe("WorkbenchView", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /summarize/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^summarize$/i }));
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: /^summarize$/i,
+      }),
+    );
 
     await waitFor(() =>
       expect(onGenerateSummary).toHaveBeenCalledWith(

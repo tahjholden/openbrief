@@ -1,14 +1,6 @@
-import { LayoutGrid, ListVideo, Notebook, Settings, Volume2 } from "lucide-react";
-import { useEffect, type ReactNode } from "react";
-import { Button } from "@acme/ui/button";
-import { OpenBriefMark } from "@acme/ui/openbrief-mark";
-import { ShortcutKbd } from "@/components/keyboard/ShortcutKbd";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@acme/ui/tooltip";
+import type { LibraryView } from "@/hooks/useMediaLibrary";
+import type { ReactNode } from "react";
+import { useEffect } from "react";
 import {
   isAddVideoShortcutKey,
   isSearchShortcutKey,
@@ -16,9 +8,25 @@ import {
   resolveShortcutKeys,
   viewForShortcutKey,
 } from "@/app/navigationShortcuts";
-import type { LibraryView } from "@/hooks/useMediaLibrary";
+import { ShortcutKbd } from "@/components/keyboard/ShortcutKbd";
 import { useI18n } from "@/i18n";
+import {
+  LayoutGrid,
+  ListVideo,
+  Notebook,
+  Settings,
+  Volume2,
+} from "lucide-react";
+
 import { cn } from "@acme/ui";
+import { Button } from "@acme/ui/button";
+import { OpenBriefMark } from "@acme/ui/openbrief-mark";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@acme/ui/tooltip";
 
 type AppLayoutProps = {
   activeView: LibraryView;
@@ -79,9 +87,9 @@ export function AppLayout({
   }, [onActiveViewChange, onAddVideoShortcut, onSearchShortcut]);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <aside className="fixed inset-y-0 left-0 z-50 flex w-20 flex-col items-center border-r border-border bg-card px-3 py-5">
-        <div className="mb-6 flex h-11 w-11 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+    <div className="bg-background text-foreground min-h-screen">
+      <aside className="border-border bg-card fixed inset-y-0 left-0 z-50 flex w-20 flex-col items-center border-r px-3 py-5">
+        <div className="bg-primary text-primary-foreground mb-6 flex h-11 w-11 items-center justify-center rounded-lg">
           <OpenBriefMark className="h-5 w-5" />
         </div>
         <TooltipProvider delayDuration={0}>
@@ -113,7 +121,7 @@ export function AppLayout({
       </aside>
 
       <div className="min-h-screen pl-20">
-        <header className="fixed left-20 right-0 top-0 z-40 flex h-16 items-center justify-between gap-6 border-b border-border bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <header className="border-border bg-background/95 supports-[backdrop-filter]:bg-background/80 fixed top-0 right-0 left-20 z-40 flex h-16 items-center justify-between gap-6 border-b px-6 backdrop-blur">
           <h1
             className={cn(
               "min-w-0 truncate text-lg font-semibold",
@@ -176,7 +184,7 @@ function SidebarNavItem({
         side="right"
         align="center"
         sideOffset={8}
-        className="w-max max-w-xs whitespace-nowrap px-3 py-2"
+        className="w-max max-w-xs px-3 py-2 whitespace-nowrap"
       >
         <div className="flex items-center justify-between gap-3 text-sm">
           <span className="font-medium">{label}</span>

@@ -2189,6 +2189,8 @@ export function AppShell() {
           onUpdateYtDlpNow={updateYtDlpFromSettings}
           onVideoDownloadAccessAction={handleVideoDownloadAccessAction}
           onOpenOnboarding={showOnboarding}
+          onOpenTutorial={() => showView("tutorial")}
+          onOpenFaq={() => showView("faq")}
           onConfigureProvider={configureProvider}
           appTheme={appTheme}
           onThemeChange={changeAppTheme}

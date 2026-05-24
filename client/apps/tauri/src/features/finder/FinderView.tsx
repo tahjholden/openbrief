@@ -460,7 +460,7 @@ function IngestControls({
   const { t } = useI18n();
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
       <Card>
         <CardHeader>
           <CardTitle>{t("finder.import.title")}</CardTitle>

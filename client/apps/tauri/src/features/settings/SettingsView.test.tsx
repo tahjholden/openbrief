@@ -1,11 +1,11 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
-import { SettingsView } from "@/features/settings/SettingsView";
-import { createPlatformCompatibilityReport } from "@/domain/compatibility";
 import type { SettingsSnapshot } from "@/domain/settings";
+import { createPlatformCompatibilityReport } from "@/domain/compatibility";
+import { SettingsView } from "@/features/settings/SettingsView";
 import { defaultAiProviderPreferences } from "@/services/aiProviderPreferencesService";
 import { defaultSystemPromptSettings } from "@/services/systemPromptSettingsService";
 import { defaultTtsSettings } from "@/services/ttsSettingsService";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 const settings: SettingsSnapshot = {
   versionInfo: {
@@ -175,33 +175,49 @@ const settings: SettingsSnapshot = {
   }),
 };
 
+function openSettingsTab(name: string) {
+  fireEvent.click(screen.getByRole("tab", { name }));
+}
+
 describe("SettingsView", () => {
   it("renders section cards while settings are loading", () => {
     render(<SettingsView />);
 
-    expect(screen.getByText("Appearance")).toBeInTheDocument();
-    expect(screen.getByText("Version Info")).toBeInTheDocument();
-    expect(screen.getAllByText("Storage").length).toBeGreaterThan(0);
-    expect(screen.getByText("Compatibility")).toBeInTheDocument();
-    expect(screen.getByText("Video Download")).toBeInTheDocument();
-    expect(screen.getByText("STT")).toBeInTheDocument();
-    expect(screen.getByText("TTS")).toBeInTheDocument();
-    expect(screen.getByText("AI Providers")).toBeInTheDocument();
-    expect(screen.getByText("System Prompts")).toBeInTheDocument();
-    expect(screen.getAllByText("Loading settings...").length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("tablist", { name: "Settings sections" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Appearance" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "System" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "Video Download" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Speech" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "AI" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Shortcuts" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Help" })).toBeInTheDocument();
+    openSettingsTab("System");
+    expect(screen.getAllByText("Loading settings...").length).toBeGreaterThan(
+      0,
+    );
   });
 
   it("renders version, video download, STT, and AI provider sections", () => {
     render(<SettingsView settings={settings} />);
 
-    expect(screen.getByText("Appearance")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Appearance" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "System" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "Video Download" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Speech" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "AI" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Shortcuts" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Help" })).toBeInTheDocument();
+
+    openSettingsTab("System");
     expect(screen.getByText("Version Info")).toBeInTheDocument();
     expect(screen.getAllByText("Storage").length).toBeGreaterThan(0);
     expect(screen.getByText("Compatibility")).toBeInTheDocument();
-    expect(screen.getByText("Video Download")).toBeInTheDocument();
-    expect(screen.getByText("STT")).toBeInTheDocument();
-    expect(screen.getByText("TTS")).toBeInTheDocument();
-    expect(screen.getByText("AI Providers")).toBeInTheDocument();
     expect(screen.getByText("OpenBrief 0.1.0")).toBeInTheDocument();
     expect(screen.queryByText("2.11.2")).not.toBeInTheDocument();
     expect(screen.getAllByText("update available").length).toBeGreaterThan(0);
@@ -218,6 +234,9 @@ describe("SettingsView", () => {
     expect(screen.getByText("macOS ARM64")).toBeInTheDocument();
     expect(screen.getAllByText("supported").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Update" })).toBeInTheDocument();
+
+    openSettingsTab("Video Download");
+    expect(screen.getAllByText("Video Download").length).toBeGreaterThan(0);
     expect(screen.getByText("Not required")).toBeInTheDocument();
     expect(screen.getByText("available")).toBeInTheDocument();
     expect(screen.getByText("2026.03.17")).toBeInTheDocument();
@@ -226,16 +245,30 @@ describe("SettingsView", () => {
     expect(screen.getByText("Authentication & cookies")).toBeInTheDocument();
     expect(screen.getByText("Use browser cookies")).toBeInTheDocument();
     expect(screen.getByText("Choose cookies.txt")).toBeInTheDocument();
+
+    openSettingsTab("Speech");
+    expect(screen.getByText("STT")).toBeInTheDocument();
+    expect(screen.getByText("TTS")).toBeInTheDocument();
     expect(screen.getByText("Whisper Small")).toBeInTheDocument();
     expect(screen.getByText("Advanced models")).toBeInTheDocument();
     expect(screen.getAllByText("not downloaded").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Qwen3-TTS 0.6B").length).toBeGreaterThan(0);
     expect(screen.getAllByText("English (en)").length).toBeGreaterThan(0);
+
+    openSettingsTab("AI");
+    expect(screen.getByText("AI Providers")).toBeInTheDocument();
+    expect(screen.getByText("System Prompts")).toBeInTheDocument();
     expect(screen.getAllByText("Default").length).toBeGreaterThan(0);
     expect(screen.getAllByText("OpenAI").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Claude").length).toBeGreaterThan(0);
     expect(screen.getAllByText("configured").length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("button", { name: "Configure" })).toHaveLength(4);
+    expect(screen.getAllByRole("button", { name: "Configure" })).toHaveLength(
+      4,
+    );
+
+    openSettingsTab("Shortcuts");
+    expect(screen.getByText("Open Library")).toBeInTheDocument();
+    expect(screen.getByText("Focus Library search")).toBeInTheDocument();
   });
 
   it("changes the app theme from settings", () => {
@@ -258,12 +291,10 @@ describe("SettingsView", () => {
     const onRefreshStorage = vi.fn().mockResolvedValue(undefined);
 
     render(
-      <SettingsView
-        settings={settings}
-        onRefreshStorage={onRefreshStorage}
-      />,
+      <SettingsView settings={settings} onRefreshStorage={onRefreshStorage} />,
     );
 
+    openSettingsTab("System");
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
 
     await waitFor(() => expect(onRefreshStorage).toHaveBeenCalledTimes(1));
@@ -282,12 +313,15 @@ describe("SettingsView", () => {
       />,
     );
 
+    openSettingsTab("System");
     expect(screen.getByText("Storage usage unavailable")).toBeInTheDocument();
     expect(
       screen.getByText("storage_read_dir_failed:denied"),
     ).toBeInTheDocument();
-    expect(screen.getByText("Video Download")).toBeInTheDocument();
-    expect(screen.getByText("AI Providers")).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "Video Download" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "AI" })).toBeInTheDocument();
   });
 
   it("surfaces platform compatibility warnings", () => {
@@ -329,8 +363,10 @@ describe("SettingsView", () => {
       />,
     );
 
+    openSettingsTab("System");
     expect(screen.getByText("Linux ARM64")).toBeInTheDocument();
     expect(screen.getAllByText("warning").length).toBeGreaterThan(0);
+    openSettingsTab("Speech");
     expect(screen.getByText(/blocked on Linux ARM64/i)).toBeInTheDocument();
   });
 
@@ -360,6 +396,7 @@ describe("SettingsView", () => {
       />,
     );
 
+    openSettingsTab("AI");
     fireEvent.click(screen.getAllByRole("button", { name: "Configure" })[1]);
 
     expect(onConfigureProvider).toHaveBeenCalledWith("anthropic");
@@ -376,6 +413,7 @@ describe("SettingsView", () => {
       />,
     );
 
+    openSettingsTab("AI");
     fireEvent.change(screen.getByLabelText("Summarize provider Provider"), {
       target: { value: "anthropic" },
     });
@@ -431,6 +469,7 @@ describe("SettingsView", () => {
       />,
     );
 
+    openSettingsTab("Speech");
     expect(screen.getAllByText("Mark (M1)").length).toBeGreaterThan(0);
     expect(
       screen.getByRole("option", { name: "Sophia (F2)" }),
@@ -458,9 +497,13 @@ describe("SettingsView", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Model", { selector: "#settings-tts-model" }), {
-      target: { value: "qwen-tts-1.7B" },
-    });
+    openSettingsTab("Speech");
+    fireEvent.change(
+      screen.getByLabelText("Model", { selector: "#settings-tts-model" }),
+      {
+        target: { value: "qwen-tts-1.7B" },
+      },
+    );
     fireEvent.change(screen.getByLabelText("Speech language"), {
       target: { value: "zh" },
     });
@@ -489,7 +532,10 @@ describe("SettingsView", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Use browser cookies" }));
+    openSettingsTab("Video Download");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use browser cookies" }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Choose cookies.txt" }));
     fireEvent.click(screen.getByRole("button", { name: "Configure PO token" }));
     fireEvent.click(
@@ -521,6 +567,7 @@ describe("SettingsView", () => {
       <SettingsView settings={settings} onUpdateAppNow={onUpdateAppNow} />,
     );
 
+    openSettingsTab("System");
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
 
     await waitFor(() => expect(onUpdateAppNow).toHaveBeenCalledTimes(1));
@@ -543,20 +590,35 @@ describe("SettingsView", () => {
       />,
     );
 
+    openSettingsTab("System");
     expect(screen.getAllByText("up to date").length).toBeGreaterThan(0);
-    expect(screen.queryByRole("button", { name: "Update" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Update" }),
+    ).not.toBeInTheDocument();
   });
 
-  it("can reopen onboarding from settings", () => {
+  it("opens help destinations from settings", () => {
     const onOpenOnboarding = vi.fn();
+    const onOpenTutorial = vi.fn();
+    const onOpenFaq = vi.fn();
 
     render(
-      <SettingsView settings={settings} onOpenOnboarding={onOpenOnboarding} />,
+      <SettingsView
+        settings={settings}
+        onOpenOnboarding={onOpenOnboarding}
+        onOpenTutorial={onOpenTutorial}
+        onOpenFaq={onOpenFaq}
+      />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "See onboarding" }));
+    openSettingsTab("Help");
+    fireEvent.click(screen.getByRole("button", { name: "Onboarding" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tutorial" }));
+    fireEvent.click(screen.getByRole("button", { name: "FAQ" }));
 
     expect(onOpenOnboarding).toHaveBeenCalledTimes(1);
+    expect(onOpenTutorial).toHaveBeenCalledTimes(1);
+    expect(onOpenFaq).toHaveBeenCalledTimes(1);
   });
 
   it("edits and resets system prompts", async () => {
@@ -574,9 +636,12 @@ describe("SettingsView", () => {
       />,
     );
 
+    openSettingsTab("AI");
     expect(screen.getByText("System Prompts")).toBeInTheDocument();
     expect(screen.getByLabelText(/transcript review/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/transcript translation/i)).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(/transcript translation/i),
+    ).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/video summary/i), {
       target: { value: "Custom summary prompt" },
@@ -592,7 +657,8 @@ describe("SettingsView", () => {
           videoSummary: "Custom summary prompt",
           chat: "Custom chat prompt",
           transcriptReview: defaultSystemPromptSettings.transcriptReview,
-          transcriptTranslation: defaultSystemPromptSettings.transcriptTranslation,
+          transcriptTranslation:
+            defaultSystemPromptSettings.transcriptTranslation,
         }),
       ),
     );

@@ -34,6 +34,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -299,6 +300,10 @@ export function WorkbenchView({
   );
   const [podcastSourceKind, setPodcastSourceKind] =
     useState<PodcastSourceKind>("current-summary");
+  const [isSummaryGenerateDialogOpen, setIsSummaryGenerateDialogOpen] =
+    useState(false);
+  const [isPodcastGenerateDialogOpen, setIsPodcastGenerateDialogOpen] =
+    useState(false);
   const [contextMode, setContextMode] = useState<ChatContextMode>("summary");
   const [localSummaryProviderConfig, setLocalSummaryProviderConfig] =
     useState<AiWorkflowProviderConfig>({
@@ -645,6 +650,29 @@ export function WorkbenchView({
       speakers,
       languageCode: nextSettings.languageCode,
     });
+  }
+
+  function generateSummary() {
+    if (isSummarizing || renderedTranscript.length === 0) return;
+
+    setIsSummaryGenerateDialogOpen(false);
+    void onGenerateSummary(
+      summaryProviderConfig.provider,
+      summaryProviderConfig.model,
+      summaryTemplateId,
+      summaryLengthMode,
+      summaryLanguage.outputLanguage ??
+        (activeTranscriptVariant?.kind === "translation"
+          ? activeTranscriptVariant.languageLabel
+          : undefined),
+      summaryProviderConfig.streamingMode,
+      renderedTranscript,
+    ).catch(() => {});
+  }
+
+  function submitPodcastGeneration() {
+    setIsPodcastGenerateDialogOpen(false);
+    void generatePodcast().catch(() => {});
   }
 
   async function downloadChatTtsAudio(
@@ -1051,41 +1079,33 @@ export function WorkbenchView({
             />
           </CardTitle>
           <div className="flex flex-wrap gap-2">
-            <SummaryTemplateSelect
-              value={summaryTemplateId}
-              onChange={setSummaryTemplateId}
+            <SummaryGenerateDialog
+              open={isSummaryGenerateDialogOpen}
+              templateId={summaryTemplateId}
+              lengthMode={summaryLengthMode}
+              languageCode={summaryLanguage.code}
+              isGenerating={isSummarizing}
+              disabled={renderedTranscript.length === 0}
+              onOpenChange={setIsSummaryGenerateDialogOpen}
+              onTemplateChange={setSummaryTemplateId}
+              onLengthChange={setSummaryLengthMode}
+              onLanguageChange={setSummaryLanguage}
+              onGenerate={generateSummary}
             />
-            <SummaryLengthSelect
-              value={summaryLengthMode}
-              onChange={setSummaryLengthMode}
+            <PodcastGenerateDialog
+              open={isPodcastGenerateDialogOpen}
+              podcastHistoryCount={podcastHistory.length}
+              settings={podcastSettings}
+              sourceKind={podcastSourceKind}
+              canGenerate={Boolean(onGeneratePodcast && video)}
+              hasSummary={Boolean(activeSummary)}
+              hasTranscript={transcript.length > 0}
+              isGenerating={isGeneratingPodcast}
+              onOpenChange={setIsPodcastGenerateDialogOpen}
+              onSettingsChange={setPodcastSettings}
+              onSourceKindChange={setPodcastSourceKind}
+              onGenerate={submitPodcastGeneration}
             />
-            <SummaryLanguageSelect
-              value={summaryLanguage.code}
-              onChange={setSummaryLanguage}
-            />
-            <Button
-              type="button"
-              disabled={isSummarizing || transcript.length === 0}
-              onClick={() => {
-                void onGenerateSummary(
-                  summaryProviderConfig.provider,
-                  summaryProviderConfig.model,
-                  summaryTemplateId,
-                  summaryLengthMode,
-                  summaryLanguage.outputLanguage ??
-                    (activeTranscriptVariant?.kind === "translation"
-                      ? activeTranscriptVariant.languageLabel
-                      : undefined),
-                  summaryProviderConfig.streamingMode,
-                  renderedTranscript,
-                ).catch(() => {});
-              }}
-            >
-              <Bot className="mr-2 h-4 w-4" aria-hidden="true" />
-              {isSummarizing
-                ? t("workbench.summary.generating")
-                : t("workbench.summary.action")}
-            </Button>
             {activeSummary ? (
               <Button
                 type="button"
@@ -1150,15 +1170,9 @@ export function WorkbenchView({
             podcastHistory={podcastHistory}
             podcastJob={podcastJob}
             podcastAudioUrl={podcastAudioUrl}
-            settings={podcastSettings}
             sourceKind={podcastSourceKind}
-            canGenerate={Boolean(onGeneratePodcast && video)}
             hasSummary={Boolean(activeSummary)}
             hasTranscript={transcript.length > 0}
-            isGenerating={isGeneratingPodcast}
-            onSettingsChange={setPodcastSettings}
-            onSourceKindChange={setPodcastSourceKind}
-            onGenerate={() => void generatePodcast().catch(() => {})}
             onPlayPodcast={onPlayPodcast}
             onDownloadPodcastAudio={onDownloadPodcastAudio}
             onDownloadPodcastScript={onDownloadPodcastScript}
@@ -1379,15 +1393,9 @@ function PodcastPanel({
   podcastHistory,
   podcastJob,
   podcastAudioUrl,
-  settings,
   sourceKind,
-  canGenerate,
   hasSummary,
   hasTranscript,
-  isGenerating,
-  onSettingsChange,
-  onSourceKindChange,
-  onGenerate,
   onPlayPodcast,
   onDownloadPodcastAudio,
   onDownloadPodcastScript,
@@ -1397,15 +1405,9 @@ function PodcastPanel({
   podcastHistory: PodcastDocument[];
   podcastJob?: PodcastGenerationJob;
   podcastAudioUrl?: string;
-  settings: PodcastTtsSettings;
   sourceKind: PodcastSourceKind;
-  canGenerate: boolean;
   hasSummary: boolean;
   hasTranscript: boolean;
-  isGenerating: boolean;
-  onSettingsChange(settings: PodcastTtsSettings): void;
-  onSourceKindChange(sourceKind: PodcastSourceKind): void;
-  onGenerate(): void;
   onPlayPodcast?(podcast: PodcastDocument): Promise<unknown> | unknown;
   onDownloadPodcastAudio?(podcast: PodcastDocument): Promise<unknown> | unknown;
   onDownloadPodcastScript?(podcast: PodcastDocument): Promise<unknown> | unknown;
@@ -1414,10 +1416,8 @@ function PodcastPanel({
   const { t } = useI18n();
   const sourceAvailable =
     sourceKind === "current-summary" ? hasSummary : hasTranscript;
-  const hasDistinctSpeakers =
-    settings.speakerAVoiceStyleId !== settings.speakerBVoiceStyleId;
-  const disabled =
-    !canGenerate || !sourceAvailable || !hasDistinctSpeakers || isGenerating;
+
+  if (!podcast && !podcastJob) return null;
 
   return (
     <div className="grid gap-3 border-t pt-3">
@@ -1439,107 +1439,7 @@ function PodcastPanel({
           </span>
         ) : null}
       </div>
-      <div className="grid gap-2 sm:grid-cols-2">
-        <PodcastSelect
-          label={t("workbench.podcast.mode")}
-          value={settings.mode}
-          options={[
-            { value: "podcast-summary", label: t("workbench.podcast.mode.summary") },
-            { value: "audiobook-brief", label: t("workbench.podcast.mode.audiobook") },
-          ]}
-          onChange={(mode) =>
-            onSettingsChange({ ...settings, mode: mode as PodcastOutputMode })
-          }
-        />
-        <PodcastSelect
-          label={t("workbench.podcast.source")}
-          value={sourceKind}
-          options={[
-            {
-              value: "current-summary",
-              label: t("workbench.podcast.source.summary"),
-            },
-            { value: "transcript", label: t("workbench.podcast.source.transcript") },
-            {
-              value: "active-transcript-translation",
-              label: t("workbench.podcast.source.translation"),
-            },
-          ]}
-          onChange={(value) => onSourceKindChange(value as PodcastSourceKind)}
-        />
-        <PodcastSelect
-          label={t("workbench.podcast.length")}
-          value={settings.lengthMode}
-          options={[
-            { value: "short", label: t("workbench.podcast.length.short") },
-            { value: "default", label: t("workbench.podcast.length.default") },
-            { value: "long", label: t("workbench.podcast.length.long") },
-          ]}
-          onChange={(lengthMode) =>
-            onSettingsChange({
-              ...settings,
-              lengthMode: lengthMode as PodcastLengthMode,
-            })
-          }
-        />
-        <PodcastSelect
-          label={t("workbench.podcast.language")}
-          value={settings.languageCode}
-          options={[
-            { value: "en", label: "English" },
-            { value: "ko", label: "Korean" },
-            { value: "ja", label: "Japanese" },
-            { value: "es", label: "Spanish" },
-            { value: "fr", label: "French" },
-            { value: "de", label: "German" },
-          ]}
-          onChange={(languageCode) =>
-            onSettingsChange({
-              ...settings,
-              languageCode: languageCode as TtsLanguageCode,
-            })
-          }
-        />
-        <PodcastSelect
-          label={t("workbench.podcast.speakerA")}
-          value={settings.speakerAVoiceStyleId}
-          options={supertonicPresetVoiceStyles.map((voice) => ({
-            value: voice.id,
-            label: voice.label,
-          }))}
-          onChange={(speakerAVoiceStyleId) =>
-            onSettingsChange({
-              ...settings,
-              speakerAVoiceStyleId: speakerAVoiceStyleId as PodcastTtsSettings["speakerAVoiceStyleId"],
-            })
-          }
-        />
-        <PodcastSelect
-          label={t("workbench.podcast.speakerB")}
-          value={settings.speakerBVoiceStyleId}
-          options={supertonicPresetVoiceStyles.map((voice) => ({
-            value: voice.id,
-            label: voice.label,
-          }))}
-          onChange={(speakerBVoiceStyleId) =>
-            onSettingsChange({
-              ...settings,
-              speakerBVoiceStyleId: speakerBVoiceStyleId as PodcastTtsSettings["speakerBVoiceStyleId"],
-            })
-          }
-        />
-      </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" disabled={disabled} onClick={onGenerate}>
-          {isGenerating ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-          ) : (
-            <Bot className="mr-2 h-4 w-4" aria-hidden="true" />
-          )}
-          {isGenerating
-            ? t("workbench.podcast.generating")
-            : t("workbench.podcast.generate")}
-        </Button>
         {podcast ? (
           <>
             {onPlayPodcast ? (
@@ -1593,19 +1493,304 @@ function PodcastPanel({
           src={podcastAudioUrl}
         />
       ) : null}
-      {!sourceAvailable ? (
+      {podcastJob && !sourceAvailable ? (
         <p className="text-xs text-muted-foreground">
           {sourceKind === "current-summary"
             ? t("workbench.podcast.summaryRequired")
             : t("workbench.podcast.transcriptRequired")}
         </p>
       ) : null}
-      {sourceAvailable && !hasDistinctSpeakers ? (
-        <p className="text-xs text-muted-foreground">
-          {t("workbench.podcast.distinctVoicesRequired")}
-        </p>
-      ) : null}
     </div>
+  );
+}
+
+function SummaryGenerateDialog({
+  open,
+  templateId,
+  lengthMode,
+  languageCode,
+  isGenerating,
+  disabled,
+  onOpenChange,
+  onTemplateChange,
+  onLengthChange,
+  onLanguageChange,
+  onGenerate,
+}: {
+  open: boolean;
+  templateId: VideoSummaryTemplateId;
+  lengthMode: SummaryLengthMode;
+  languageCode: string;
+  isGenerating: boolean;
+  disabled: boolean;
+  onOpenChange(open: boolean): void;
+  onTemplateChange(value: VideoSummaryTemplateId): void;
+  onLengthChange(value: SummaryLengthMode): void;
+  onLanguageChange(value: SummaryOutputLanguageOption): void;
+  onGenerate(): void;
+}) {
+  const { t } = useI18n();
+  const submitDisabled = disabled || isGenerating;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogTrigger asChild>
+        <Button type="button" disabled={submitDisabled}>
+          {isGenerating ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <Bot className="mr-2 h-4 w-4" aria-hidden="true" />
+          )}
+          {isGenerating
+            ? t("workbench.summary.generating")
+            : t("workbench.summary.action")}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t("workbench.summary.action")}</DialogTitle>
+          <DialogDescription>
+            {t("workbench.summary.dialog.description")}
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          className="grid gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (submitDisabled) return;
+            onGenerate();
+          }}
+        >
+          <div className="grid gap-2 text-sm">
+            <span className="font-medium">{t("workbench.summary.template")}</span>
+            <SummaryTemplateSelect
+              value={templateId}
+              triggerClassName="w-full"
+              onChange={onTemplateChange}
+            />
+          </div>
+          <div className="grid gap-2 text-sm">
+            <span className="font-medium">{t("workbench.summary.length")}</span>
+            <SummaryLengthSelect
+              value={lengthMode}
+              triggerClassName="w-full"
+              onChange={onLengthChange}
+            />
+          </div>
+          <div className="grid gap-2 text-sm">
+            <span className="font-medium">{t("workbench.summary.language")}</span>
+            <SummaryLanguageSelect
+              value={languageCode}
+              triggerClassName="w-full"
+              onChange={onLanguageChange}
+            />
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={submitDisabled}>
+              <Bot className="mr-2 h-4 w-4" aria-hidden="true" />
+              {t("workbench.summary.action")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function PodcastGenerateDialog({
+  open,
+  podcastHistoryCount,
+  settings,
+  sourceKind,
+  canGenerate,
+  hasSummary,
+  hasTranscript,
+  isGenerating,
+  onOpenChange,
+  onSettingsChange,
+  onSourceKindChange,
+  onGenerate,
+}: {
+  open: boolean;
+  podcastHistoryCount: number;
+  settings: PodcastTtsSettings;
+  sourceKind: PodcastSourceKind;
+  canGenerate: boolean;
+  hasSummary: boolean;
+  hasTranscript: boolean;
+  isGenerating: boolean;
+  onOpenChange(open: boolean): void;
+  onSettingsChange(settings: PodcastTtsSettings): void;
+  onSourceKindChange(sourceKind: PodcastSourceKind): void;
+  onGenerate(): void;
+}) {
+  const { t } = useI18n();
+  const sourceAvailable =
+    sourceKind === "current-summary" ? hasSummary : hasTranscript;
+  const hasDistinctSpeakers =
+    settings.speakerAVoiceStyleId !== settings.speakerBVoiceStyleId;
+  const submitDisabled =
+    !canGenerate || !sourceAvailable || !hasDistinctSpeakers || isGenerating;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogTrigger asChild>
+        <Button type="button" variant="outline" disabled={!canGenerate || isGenerating}>
+          {isGenerating ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <Volume2 className="mr-2 h-4 w-4" aria-hidden="true" />
+          )}
+          {isGenerating
+            ? t("workbench.podcast.generating")
+            : t("workbench.podcast.generate")}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle>{t("workbench.podcast.generate")}</DialogTitle>
+          <DialogDescription>
+            {t("workbench.podcast.dialog.description")}
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          className="grid gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (submitDisabled) return;
+            onGenerate();
+          }}
+        >
+          <div className="grid gap-2 sm:grid-cols-2">
+            <PodcastSelect
+              label={t("workbench.podcast.mode")}
+              value={settings.mode}
+              options={[
+                {
+                  value: "podcast-summary",
+                  label: t("workbench.podcast.mode.summary"),
+                },
+                {
+                  value: "audiobook-brief",
+                  label: t("workbench.podcast.mode.audiobook"),
+                },
+              ]}
+              onChange={(mode) =>
+                onSettingsChange({ ...settings, mode: mode as PodcastOutputMode })
+              }
+            />
+            <PodcastSelect
+              label={t("workbench.podcast.source")}
+              value={sourceKind}
+              options={[
+                {
+                  value: "current-summary",
+                  label: t("workbench.podcast.source.summary"),
+                },
+                {
+                  value: "transcript",
+                  label: t("workbench.podcast.source.transcript"),
+                },
+                {
+                  value: "active-transcript-translation",
+                  label: t("workbench.podcast.source.translation"),
+                },
+              ]}
+              onChange={(value) => onSourceKindChange(value as PodcastSourceKind)}
+            />
+            <PodcastSelect
+              label={t("workbench.podcast.length")}
+              value={settings.lengthMode}
+              options={[
+                { value: "short", label: t("workbench.podcast.length.short") },
+                {
+                  value: "default",
+                  label: t("workbench.podcast.length.default"),
+                },
+                { value: "long", label: t("workbench.podcast.length.long") },
+              ]}
+              onChange={(lengthMode) =>
+                onSettingsChange({
+                  ...settings,
+                  lengthMode: lengthMode as PodcastLengthMode,
+                })
+              }
+            />
+            <PodcastSelect
+              label={t("workbench.podcast.language")}
+              value={settings.languageCode}
+              options={[
+                { value: "en", label: "English" },
+                { value: "ko", label: "Korean" },
+                { value: "ja", label: "Japanese" },
+                { value: "es", label: "Spanish" },
+                { value: "fr", label: "French" },
+                { value: "de", label: "German" },
+              ]}
+              onChange={(languageCode) =>
+                onSettingsChange({
+                  ...settings,
+                  languageCode: languageCode as TtsLanguageCode,
+                })
+              }
+            />
+            <PodcastSelect
+              label={t("workbench.podcast.speakerA")}
+              value={settings.speakerAVoiceStyleId}
+              options={supertonicPresetVoiceStyles.map((voice) => ({
+                value: voice.id,
+                label: voice.label,
+              }))}
+              onChange={(speakerAVoiceStyleId) =>
+                onSettingsChange({
+                  ...settings,
+                  speakerAVoiceStyleId:
+                    speakerAVoiceStyleId as PodcastTtsSettings["speakerAVoiceStyleId"],
+                })
+              }
+            />
+            <PodcastSelect
+              label={t("workbench.podcast.speakerB")}
+              value={settings.speakerBVoiceStyleId}
+              options={supertonicPresetVoiceStyles.map((voice) => ({
+                value: voice.id,
+                label: voice.label,
+              }))}
+              onChange={(speakerBVoiceStyleId) =>
+                onSettingsChange({
+                  ...settings,
+                  speakerBVoiceStyleId:
+                    speakerBVoiceStyleId as PodcastTtsSettings["speakerBVoiceStyleId"],
+                })
+              }
+            />
+          </div>
+          {!sourceAvailable ? (
+            <p className="text-xs text-muted-foreground">
+              {sourceKind === "current-summary"
+                ? t("workbench.podcast.summaryRequired")
+                : t("workbench.podcast.transcriptRequired")}
+            </p>
+          ) : null}
+          {sourceAvailable && !hasDistinctSpeakers ? (
+            <p className="text-xs text-muted-foreground">
+              {t("workbench.podcast.distinctVoicesRequired")}
+            </p>
+          ) : null}
+          {podcastHistoryCount > 1 ? (
+            <p className="text-xs text-muted-foreground">
+              {t("workbench.podcast.history", { count: podcastHistoryCount })}
+            </p>
+          ) : null}
+          <DialogFooter>
+            <Button type="submit" disabled={submitDisabled}>
+              <Bot className="mr-2 h-4 w-4" aria-hidden="true" />
+              {t("workbench.podcast.generate")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -2836,9 +3021,11 @@ function ProviderModelSelect({
 
 function SummaryTemplateSelect({
   value,
+  triggerClassName,
   onChange,
 }: {
   value: VideoSummaryTemplateId;
+  triggerClassName?: string;
   onChange(value: VideoSummaryTemplateId): void;
 }) {
   const { t } = useI18n();
@@ -2847,6 +3034,7 @@ function SummaryTemplateSelect({
     <WorkbenchSelect
       ariaLabel={t("workbench.summary.template")}
       value={value}
+      triggerClassName={triggerClassName}
       onValueChange={(nextValue) => onChange(nextValue as VideoSummaryTemplateId)}
       options={videoSummaryTemplates.map((template) => ({
         value: template.id,
@@ -2858,9 +3046,11 @@ function SummaryTemplateSelect({
 
 function SummaryLengthSelect({
   value,
+  triggerClassName,
   onChange,
 }: {
   value: SummaryLengthMode;
+  triggerClassName?: string;
   onChange(value: SummaryLengthMode): void;
 }) {
   const { t } = useI18n();
@@ -2869,6 +3059,7 @@ function SummaryLengthSelect({
     <WorkbenchSelect
       ariaLabel={t("workbench.summary.length")}
       value={value}
+      triggerClassName={triggerClassName}
       onValueChange={(nextValue) => onChange(nextValue as SummaryLengthMode)}
       options={(Object.keys(summaryLengthModeLabels) as SummaryLengthMode[]).map(
         (mode) => ({
@@ -2882,9 +3073,11 @@ function SummaryLengthSelect({
 
 function SummaryLanguageSelect({
   value,
+  triggerClassName,
   onChange,
 }: {
   value: string;
+  triggerClassName?: string;
   onChange(value: SummaryOutputLanguageOption): void;
 }) {
   const { t } = useI18n();
@@ -2893,7 +3086,7 @@ function SummaryLanguageSelect({
     <WorkbenchSelect
       ariaLabel={t("workbench.summary.language")}
       value={value}
-      triggerClassName="w-44"
+      triggerClassName={cn("w-44", triggerClassName)}
       onValueChange={(nextValue) => {
         const option =
           summaryOutputLanguageOptions.find(

@@ -1,4 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import type { ChatContextMode } from "@/domain/chat";
+import type {
+  CaptionLanguage,
+  HelperCommandName,
+} from "@/domain/helper-protocol";
+import type {
+  IngestResult,
+  LocalFileImportRequest,
+  YoutubeImportRequest,
+} from "@/domain/ingest";
+import type { MarkdownSavePayload } from "@/domain/markdown-save";
 import type {
   ChatMessage,
   IngestJob,
@@ -9,63 +19,37 @@ import type {
   VideoAsset,
   VideoPlaylist,
 } from "@/domain/media-library";
-import {
-  createTranscriptSourceVariant,
-  type TranscriptLanguageOption,
-  type TranscriptVariant,
-} from "@/domain/transcript-actions";
-import type { CaptionLanguage } from "@/domain/helper-protocol";
+import type {
+  PodcastDocument,
+  PodcastGenerationJob,
+  PodcastLengthMode,
+  PodcastOutputMode,
+  PodcastSourceKind,
+  PodcastSpeakerConfig,
+} from "@/domain/podcast";
 import type {
   SummaryLengthMode,
   VideoSummaryTemplateId,
 } from "@/domain/summary";
-import {
-  createPodcastDocument,
-  createPodcastId,
-  type PodcastDocument,
-  type PodcastGenerationJob,
-  type PodcastLengthMode,
-  type PodcastOutputMode,
-  type PodcastSourceKind,
-  type PodcastSpeakerConfig,
-} from "@/domain/podcast";
-import {
-  generatePodcastTts,
-  type GeneratePodcastTtsRequest,
-} from "@/services/podcastService";
-import type { HelperCommandName } from "@/domain/helper-protocol";
 import type {
-  IngestResult,
-  LocalFileImportRequest,
-  YoutubeImportRequest,
-} from "@/domain/ingest";
-import { createYoutubeDownloadCommand } from "@/domain/ingest";
-import {
-  createTranscriptJobId,
-  type TranscriptPipelineEvent,
-  type TranscriptPipelineResult,
+  TranscriptPipelineEvent,
+  TranscriptPipelineResult,
 } from "@/domain/transcript";
-import {
-  createMockIngestService,
-  createTauriIngestService,
-  type IngestService,
-} from "@/services/ingestService";
-import {
-  createHelperTranscriptService,
-  type TranscriptService,
-} from "@/services/transcriptService";
-import {
-  createSummaryChatService,
-  type SummaryChatService,
-} from "@/services/summaryChatService";
-import { createDefaultProviderService } from "@/services/providerService";
-import { FakeHelperClient, type HelperClient } from "@/services/fakeHelperClient";
-import {
-  canUseTauriRuntime,
-  TauriHelperClient,
-} from "@/services/tauriHelperClient";
-import type { ChatContextMode } from "@/domain/chat";
-import type { MarkdownSavePayload } from "@/domain/markdown-save";
+import type {
+  TranscriptLanguageOption,
+  TranscriptVariant,
+} from "@/domain/transcript-actions";
+import type { HelperClient } from "@/services/fakeHelperClient";
+import type { IngestService } from "@/services/ingestService";
+import type {
+  MediaLibraryRepository,
+  MediaLibrarySnapshot,
+} from "@/services/mediaLibraryRepository";
+import type { GeneratePodcastTtsRequest } from "@/services/podcastService";
+import type { SummaryChatService } from "@/services/summaryChatService";
+import type { TranscriptService } from "@/services/transcriptService";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createYoutubeDownloadCommand } from "@/domain/ingest";
 import {
   addVideoToPlaylist,
   createVideoPlaylist,
@@ -74,12 +58,26 @@ import {
   reorderPlaylistVideos,
   setVideoPlaylistCover,
 } from "@/domain/media-library";
+import { createPodcastDocument, createPodcastId } from "@/domain/podcast";
+import { createTranscriptJobId } from "@/domain/transcript";
+import { createTranscriptSourceVariant } from "@/domain/transcript-actions";
+import { FakeHelperClient } from "@/services/fakeHelperClient";
+import {
+  createMockIngestService,
+  createTauriIngestService,
+} from "@/services/ingestService";
 import {
   createDefaultMediaLibraryRepository,
   createEmptyMediaLibrarySnapshot,
-  type MediaLibraryRepository,
-  type MediaLibrarySnapshot,
 } from "@/services/mediaLibraryRepository";
+import { generatePodcastTts } from "@/services/podcastService";
+import { createDefaultProviderService } from "@/services/providerService";
+import { createSummaryChatService } from "@/services/summaryChatService";
+import {
+  canUseTauriRuntime,
+  TauriHelperClient,
+} from "@/services/tauriHelperClient";
+import { createHelperTranscriptService } from "@/services/transcriptService";
 
 export type LibraryView =
   | "finder"
@@ -192,10 +190,10 @@ export function useMediaLibrary(
     [librarySnapshot.videos, selectedVideoId],
   );
   const selectedTranscript = selectedVideoId
-    ? librarySnapshot.transcriptsByVideoId[selectedVideoId] ?? []
+    ? (librarySnapshot.transcriptsByVideoId[selectedVideoId] ?? [])
     : [];
   const selectedTranscriptVariants = selectedVideoId
-    ? librarySnapshot.transcriptVariantsByVideoId[selectedVideoId] ?? []
+    ? (librarySnapshot.transcriptVariantsByVideoId[selectedVideoId] ?? [])
     : [];
   const selectedSummary = selectedVideoId
     ? latestSummaryForVideo(librarySnapshot, selectedVideoId)
@@ -216,7 +214,7 @@ export function useMediaLibrary(
     ? librarySnapshot.podcastsByVideoId[selectedVideoId]
     : undefined;
   const selectedPodcastHistory = selectedVideoId
-    ? librarySnapshot.podcastHistoryByVideoId[selectedVideoId] ?? []
+    ? (librarySnapshot.podcastHistoryByVideoId[selectedVideoId] ?? [])
     : [];
   const selectedChatMessages = selectedVideoId
     ? (librarySnapshot.chatMessagesByVideoId[selectedVideoId] ?? []).filter(
@@ -260,17 +258,22 @@ export function useMediaLibrary(
       ...current,
       ingestJobs: upsertIngestJob(current.ingestJobs, queuedJob),
     }));
-    remoteImportQueueRef.current = [...remoteImportQueueRef.current, queuedRequest];
+    remoteImportQueueRef.current = [
+      ...remoteImportQueueRef.current,
+      queuedRequest,
+    ];
     void processRemoteImportQueue();
 
     return queuedJob;
   }
 
   async function cancelIngestJob(jobId: string) {
-    remoteImportQueueRef.current = remoteImportQueueRef.current.filter((request) => {
-      const commandOrFailure = createYoutubeDownloadCommand(request);
-      return "ok" in commandOrFailure || commandOrFailure.jobId !== jobId;
-    });
+    remoteImportQueueRef.current = remoteImportQueueRef.current.filter(
+      (request) => {
+        const commandOrFailure = createYoutubeDownloadCommand(request);
+        return "ok" in commandOrFailure || commandOrFailure.jobId !== jobId;
+      },
+    );
 
     updateLibrarySnapshot((current) => ({
       ...current,
@@ -330,20 +333,28 @@ export function useMediaLibrary(
           if (event.type === "job_progress") {
             updateLibrarySnapshot((current) => ({
               ...current,
-              ingestJobs: updateIngestJob(current.ingestJobs, commandOrFailure.jobId, {
-                status: "running",
-                progressPercent: event.progressPercent,
-              }),
+              ingestJobs: updateIngestJob(
+                current.ingestJobs,
+                commandOrFailure.jobId,
+                {
+                  status: "running",
+                  progressPercent: event.progressPercent,
+                },
+              ),
             }));
           }
 
           if (event.type === "job_cancelled") {
             updateLibrarySnapshot((current) => ({
               ...current,
-              ingestJobs: updateIngestJob(current.ingestJobs, commandOrFailure.jobId, {
-                status: "cancelled",
-                errorMessage: undefined,
-              }),
+              ingestJobs: updateIngestJob(
+                current.ingestJobs,
+                commandOrFailure.jobId,
+                {
+                  status: "cancelled",
+                  errorMessage: undefined,
+                },
+              ),
             }));
           }
         },
@@ -356,19 +367,23 @@ export function useMediaLibrary(
     }
   }
 
-  async function listCaptionLanguages(videoId: string): Promise<CaptionLanguage[]> {
+  async function listCaptionLanguages(
+    videoId: string,
+  ): Promise<CaptionLanguage[]> {
     const video = findVideo(videoId);
     return transcriptService.listCaptionLanguages({ video });
   }
 
   async function extractTranscript(
     videoId: string,
-    optionsOrWhisperModelPath?: string | {
-      whisperModelPath?: string;
-      whisperLanguage?: string;
-      languages?: string[];
-      sourcePreference?: "youtube-captions" | "local-stt";
-    },
+    optionsOrWhisperModelPath?:
+      | string
+      | {
+          whisperModelPath?: string;
+          whisperLanguage?: string;
+          languages?: string[];
+          sourcePreference?: "youtube-captions" | "local-stt";
+        },
   ) {
     const video = librarySnapshotRef.current.videos.find(
       (candidate) => candidate.id === videoId,
@@ -381,12 +396,14 @@ export function useMediaLibrary(
     const transcriptOptions =
       typeof optionsOrWhisperModelPath === "string"
         ? { whisperModelPath: optionsOrWhisperModelPath }
-        : optionsOrWhisperModelPath ?? {};
+        : (optionsOrWhisperModelPath ?? {});
 
     const pipelineJobId = createTranscriptJobId(videoId, "pipeline");
     const preferredSource =
       transcriptOptions.sourcePreference ??
-      (shouldAttemptCaptionTranscript(video) ? "youtube-captions" : "local-stt");
+      (shouldAttemptCaptionTranscript(video)
+        ? "youtube-captions"
+        : "local-stt");
     updateLibrarySnapshot((current) => ({
       ...current,
       transcriptJobs: upsertTranscriptJob(current.transcriptJobs, {
@@ -398,14 +415,17 @@ export function useMediaLibrary(
       }),
     }));
 
-    const result = await transcriptService.extractTranscript({
-      video,
-      ...transcriptOptions,
-    }, {
-      onEvent(event) {
-        applyTranscriptPipelineEvent(videoId, event);
+    const result = await transcriptService.extractTranscript(
+      {
+        video,
+        ...transcriptOptions,
       },
-    });
+      {
+        onEvent(event) {
+          applyTranscriptPipelineEvent(videoId, event);
+        },
+      },
+    );
     applyTranscriptResult(result);
     return result;
   }
@@ -530,7 +550,8 @@ export function useMediaLibrary(
         provider,
         model,
         sessionId: activeSessionId,
-        transcript: librarySnapshotRef.current.transcriptsByVideoId[videoId] ?? [],
+        transcript:
+          librarySnapshotRef.current.transcriptsByVideoId[videoId] ?? [],
         summary:
           summaryById(librarySnapshotRef.current, videoId, summaryId) ??
           latestSummaryForVideo(librarySnapshotRef.current, videoId),
@@ -606,11 +627,13 @@ export function useMediaLibrary(
   }) {
     const video = findVideo(videoId);
     const resolvedTranscript =
-      transcript ?? librarySnapshotRef.current.transcriptsByVideoId[videoId] ?? [];
+      transcript ??
+      librarySnapshotRef.current.transcriptsByVideoId[videoId] ??
+      [];
     const transcriptVariant = transcriptVariantId
-      ? (librarySnapshotRef.current.transcriptVariantsByVideoId[videoId] ?? []).find(
-          (variant) => variant.id === transcriptVariantId,
-        )
+      ? (
+          librarySnapshotRef.current.transcriptVariantsByVideoId[videoId] ?? []
+        ).find((variant) => variant.id === transcriptVariantId)
       : undefined;
     const summary =
       summaryById(librarySnapshotRef.current, videoId, summaryId) ??
@@ -712,30 +735,27 @@ export function useMediaLibrary(
   }
 
   function deletePodcast(videoId: string, podcastId: string) {
-    updateLibrarySnapshot(
-      (current) => {
-        const history = (current.podcastHistoryByVideoId[videoId] ?? []).filter(
-          (podcast) => podcast.id !== podcastId,
-        );
-        return {
-          ...current,
-          podcastsByVideoId:
-            current.podcastsByVideoId[videoId]?.id === podcastId
-              ? history[0]
-                ? {
-                    ...current.podcastsByVideoId,
-                    [videoId]: history[0],
-                  }
-                : omitRecordKey(current.podcastsByVideoId, videoId)
-              : current.podcastsByVideoId,
-          podcastHistoryByVideoId: {
-            ...current.podcastHistoryByVideoId,
-            [videoId]: history,
-          },
-        };
-      },
-      true,
-    );
+    updateLibrarySnapshot((current) => {
+      const history = (current.podcastHistoryByVideoId[videoId] ?? []).filter(
+        (podcast) => podcast.id !== podcastId,
+      );
+      return {
+        ...current,
+        podcastsByVideoId:
+          current.podcastsByVideoId[videoId]?.id === podcastId
+            ? history[0]
+              ? {
+                  ...current.podcastsByVideoId,
+                  [videoId]: history[0],
+                }
+              : omitRecordKey(current.podcastsByVideoId, videoId)
+            : current.podcastsByVideoId,
+        podcastHistoryByVideoId: {
+          ...current.podcastHistoryByVideoId,
+          [videoId]: history,
+        },
+      };
+    }, true);
   }
 
   function resetChatSession(videoId: string) {
@@ -755,7 +775,8 @@ export function useMediaLibrary(
     model?: string,
   ) {
     const video = findVideo(videoId);
-    const transcript = librarySnapshotRef.current.transcriptsByVideoId[videoId] ?? [];
+    const transcript =
+      librarySnapshotRef.current.transcriptsByVideoId[videoId] ?? [];
 
     const reviewed = await summaryChatService.reviewTranscript({
       video,
@@ -790,7 +811,8 @@ export function useMediaLibrary(
     language: TranscriptLanguageOption;
   }) {
     const video = findVideo(videoId);
-    const transcript = librarySnapshotRef.current.transcriptsByVideoId[videoId] ?? [];
+    const transcript =
+      librarySnapshotRef.current.transcriptsByVideoId[videoId] ?? [];
     const variant = await summaryChatService.translateTranscript({
       video,
       transcript,
@@ -862,12 +884,17 @@ export function useMediaLibrary(
         videos: current.videos.filter((video) => video.id !== videoId),
         playlists: current.playlists.map((playlist) => ({
           ...playlist,
-          videoIds: playlist.videoIds.filter((candidate) => candidate !== videoId),
+          videoIds: playlist.videoIds.filter(
+            (candidate) => candidate !== videoId,
+          ),
         })),
         transcriptJobs: current.transcriptJobs.filter(
           (job) => job.videoId !== videoId,
         ),
-        transcriptsByVideoId: omitRecordKey(current.transcriptsByVideoId, videoId),
+        transcriptsByVideoId: omitRecordKey(
+          current.transcriptsByVideoId,
+          videoId,
+        ),
         transcriptVariantsByVideoId: omitRecordKey(
           current.transcriptVariantsByVideoId,
           videoId,
@@ -910,24 +937,19 @@ export function useMediaLibrary(
       throw new Error("transcript_segment_text_empty");
     }
 
-    updateLibrarySnapshot(
-      (current) => {
-        const transcript = current.transcriptsByVideoId[videoId] ?? [];
+    updateLibrarySnapshot((current) => {
+      const transcript = current.transcriptsByVideoId[videoId] ?? [];
 
-        return {
-          ...current,
-          transcriptsByVideoId: {
-            ...current.transcriptsByVideoId,
-            [videoId]: transcript.map((segment) =>
-              segment.id === segmentId
-                ? { ...segment, text: nextText }
-                : segment,
-            ),
-          },
-        };
-      },
-      true,
-    );
+      return {
+        ...current,
+        transcriptsByVideoId: {
+          ...current.transcriptsByVideoId,
+          [videoId]: transcript.map((segment) =>
+            segment.id === segmentId ? { ...segment, text: nextText } : segment,
+          ),
+        },
+      };
+    }, true);
   }
 
   function updateSummaryMarkdown(
@@ -935,28 +957,25 @@ export function useMediaLibrary(
     summaryId: string,
     markdown: string,
   ) {
-    updateLibrarySnapshot(
-      (current) => {
-        const history = current.summaryHistoryByVideoId[videoId] ?? [];
-        const updateSummary = (summary: SummaryDocument) =>
-          summary.id === summaryId ? { ...summary, markdown } : summary;
+    updateLibrarySnapshot((current) => {
+      const history = current.summaryHistoryByVideoId[videoId] ?? [];
+      const updateSummary = (summary: SummaryDocument) =>
+        summary.id === summaryId ? { ...summary, markdown } : summary;
 
-        return {
-          ...current,
-          summariesByVideoId: {
-            ...current.summariesByVideoId,
-            ...(current.summariesByVideoId[videoId]?.id === summaryId
-              ? { [videoId]: updateSummary(current.summariesByVideoId[videoId]) }
-              : {}),
-          },
-          summaryHistoryByVideoId: {
-            ...current.summaryHistoryByVideoId,
-            [videoId]: history.map(updateSummary),
-          },
-        };
-      },
-      true,
-    );
+      return {
+        ...current,
+        summariesByVideoId: {
+          ...current.summariesByVideoId,
+          ...(current.summariesByVideoId[videoId]?.id === summaryId
+            ? { [videoId]: updateSummary(current.summariesByVideoId[videoId]) }
+            : {}),
+        },
+        summaryHistoryByVideoId: {
+          ...current.summaryHistoryByVideoId,
+          [videoId]: history.map(updateSummary),
+        },
+      };
+    }, true);
   }
 
   function createPlaylist(title: string) {
@@ -978,7 +997,9 @@ export function useMediaLibrary(
       (current) => ({
         ...current,
         playlists: current.playlists.map((playlist) =>
-          playlist.id === playlistId ? renameVideoPlaylist(playlist, title) : playlist,
+          playlist.id === playlistId
+            ? renameVideoPlaylist(playlist, title)
+            : playlist,
         ),
       }),
       true,
@@ -1032,79 +1053,76 @@ export function useMediaLibrary(
   }
 
   function applyIngestResult(result: IngestResult) {
-    updateLibrarySnapshot(
-      (current) => {
-        const next: MediaLibrarySnapshot = {
-          ...current,
-          ingestJobs: upsertIngestJob(current.ingestJobs, result.job),
-        };
+    updateLibrarySnapshot((current) => {
+      const next: MediaLibrarySnapshot = {
+        ...current,
+        ingestJobs: upsertIngestJob(current.ingestJobs, result.job),
+      };
 
-        if (result.ok) {
-          next.videos = [
-            result.video,
-            ...current.videos.filter((video) => video.id !== result.video.id),
-          ];
-        }
+      if (result.ok) {
+        next.videos = [
+          result.video,
+          ...current.videos.filter((video) => video.id !== result.video.id),
+        ];
+      }
 
-        return next;
-      },
-      true,
-    );
+      return next;
+    }, true);
 
     if (result.ok) setSelectedVideoId(result.video.id);
   }
 
   function applyTranscriptResult(result: TranscriptPipelineResult) {
-    updateLibrarySnapshot(
-      (current) => {
-        const next: MediaLibrarySnapshot = {
-          ...current,
-          transcriptJobs: upsertTranscriptJob(current.transcriptJobs, result.job),
-        };
+    updateLibrarySnapshot((current) => {
+      const next: MediaLibrarySnapshot = {
+        ...current,
+        transcriptJobs: upsertTranscriptJob(current.transcriptJobs, result.job),
+      };
 
-        if (!result.ok) return next;
+      if (!result.ok) return next;
 
-        const video = current.videos.find(
-          (candidate) => candidate.id === result.job.videoId,
+      const video = current.videos.find(
+        (candidate) => candidate.id === result.job.videoId,
+      );
+      const currentSegments =
+        current.transcriptsByVideoId[result.job.videoId] ?? [];
+      const currentSourceKind = currentSegments[0]?.sourceKind;
+      const resultSourceKind = result.segments[0]?.sourceKind;
+
+      next.transcriptsByVideoId = {
+        ...current.transcriptsByVideoId,
+        [result.job.videoId]: result.segments,
+      };
+
+      if (
+        video &&
+        currentSegments.length > 0 &&
+        currentSourceKind &&
+        resultSourceKind &&
+        currentSourceKind !== resultSourceKind
+      ) {
+        const existingVariants =
+          current.transcriptVariantsByVideoId[result.job.videoId] ?? [];
+        const keptVariants = existingVariants.filter(
+          (variant) =>
+            variant.kind !== "source" ||
+            variant.sourceKind !== resultSourceKind,
         );
-        const currentSegments = current.transcriptsByVideoId[result.job.videoId] ?? [];
-        const currentSourceKind = currentSegments[0]?.sourceKind;
-        const resultSourceKind = result.segments[0]?.sourceKind;
-
-        next.transcriptsByVideoId = {
-          ...current.transcriptsByVideoId,
-          [result.job.videoId]: result.segments,
+        next.transcriptVariantsByVideoId = {
+          ...current.transcriptVariantsByVideoId,
+          [result.job.videoId]: upsertTranscriptVariant(
+            keptVariants,
+            createTranscriptSourceVariant({
+              video,
+              sourceKind: currentSourceKind,
+              segments: currentSegments,
+            }),
+          ),
         };
+      }
 
-        if (
-          video &&
-          currentSegments.length > 0 &&
-          currentSourceKind &&
-          resultSourceKind &&
-          currentSourceKind !== resultSourceKind
-        ) {
-          const existingVariants = current.transcriptVariantsByVideoId[result.job.videoId] ?? [];
-          const keptVariants = existingVariants.filter(
-            (variant) =>
-              variant.kind !== "source" || variant.sourceKind !== resultSourceKind,
-          );
-          next.transcriptVariantsByVideoId = {
-            ...current.transcriptVariantsByVideoId,
-            [result.job.videoId]: upsertTranscriptVariant(
-              keptVariants,
-              createTranscriptSourceVariant({
-                video,
-                sourceKind: currentSourceKind,
-                segments: currentSegments,
-              }),
-            ),
-          };
-        }
-
-        return next;
-      },
-      result.ok,
-    );
+      return next;
+    }, result.ok);
   }
 
   function applyTranscriptPipelineEvent(
@@ -1318,8 +1336,7 @@ function compareSummaryCreatedAtDesc(
   right: SummaryDocument,
 ) {
   return (
-    (Date.parse(right.createdAtIso) || 0) -
-    (Date.parse(left.createdAtIso) || 0)
+    (Date.parse(right.createdAtIso) || 0) - (Date.parse(left.createdAtIso) || 0)
   );
 }
 
@@ -1328,8 +1345,7 @@ function comparePodcastCreatedAtDesc(
   right: PodcastDocument,
 ) {
   return (
-    (Date.parse(right.createdAtIso) || 0) -
-    (Date.parse(left.createdAtIso) || 0)
+    (Date.parse(right.createdAtIso) || 0) - (Date.parse(left.createdAtIso) || 0)
   );
 }
 
@@ -1340,7 +1356,9 @@ function upsertIngestJob(jobs: IngestJob[], nextJob: IngestJob) {
     return [nextJob, ...jobs];
   }
 
-  return jobs.map((job) => (job.id === nextJob.id ? { ...job, ...nextJob } : job));
+  return jobs.map((job) =>
+    job.id === nextJob.id ? { ...job, ...nextJob } : job,
+  );
 }
 
 function upsertTranscriptJob(jobs: TranscriptJob[], nextJob: TranscriptJob) {
@@ -1376,7 +1394,8 @@ function transcriptJobPatchFromEvent(
 
   const helperEvent = event.event;
   const preferredSource =
-    helperEvent.command === "extract_audio" || helperEvent.command === "transcribe_audio"
+    helperEvent.command === "extract_audio" ||
+    helperEvent.command === "transcribe_audio"
       ? "local-stt"
       : "youtube-captions";
 
@@ -1488,5 +1507,7 @@ function createDefaultTranscriptService() {
 }
 
 function createDefaultHelperClient(): HelperClient {
-  return canUseTauriRuntime() ? new TauriHelperClient() : new FakeHelperClient();
+  return canUseTauriRuntime()
+    ? new TauriHelperClient()
+    : new FakeHelperClient();
 }

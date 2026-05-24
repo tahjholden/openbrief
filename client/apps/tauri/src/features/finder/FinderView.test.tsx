@@ -96,7 +96,9 @@ describe("FinderView", () => {
     );
 
     expect(screen.getByRole("heading", { name: /add video/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /how to use/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /how to use openbrief/i }),
+    ).toBeInTheDocument();
     expect(screen.getByText(/download or import a video/i)).toBeInTheDocument();
     expect(screen.getByText(/generate a blog-style markdown summary/i)).toBeInTheDocument();
 
