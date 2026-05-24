@@ -6,10 +6,14 @@ import {
   buildLocalAiSidecar,
   buildProfileFromArgs,
   copyBuiltLocalAiSidecar,
+  ensureVenvPythonCompatible,
   extrasForBuildProfile,
+  pythonExecutableCandidatesForPlatform,
   pyinstallerCollectArgs,
   pyinstallerOutputPath,
   releaseModeFromArgs,
+  resolveBootstrapPython,
+  supportsQwenPythonVersion,
   targetTripleFromArgs,
   torchInstallArgsForTarget,
   venvPythonPath,
@@ -67,6 +71,53 @@ describe("Local AI sidecar build script", () => {
         targetTriple: "aarch64-apple-darwin",
       }),
     ).toEqual([]);
+  });
+
+  it("prefers Python versions supported by Qwen dependencies for model profiles", () => {
+    expect(
+      pythonExecutableCandidatesForPlatform({
+        platform: "darwin",
+        profile: "tts",
+        env: {},
+      }),
+    ).toEqual(["python3.12", "python3.11", "python3.10", "python3"]);
+    expect(supportsQwenPythonVersion([3, 12, 8])).toBe(true);
+    expect(supportsQwenPythonVersion([3, 13, 0])).toBe(false);
+
+    const commands: string[][] = [];
+    const resolved = resolveBootstrapPython({
+      platform: "darwin",
+      profile: "tts",
+      env: {},
+      execFile: (command, args) => {
+        commands.push([String(command), ...args.map(String)]);
+        if (command === "python3.12") {
+          throw new Error("not installed");
+        }
+        return "3.11.9\n";
+      },
+    });
+
+    expect(resolved).toBe("python3.11");
+    expect(commands[0][0]).toBe("python3.12");
+    expect(commands[1][0]).toBe("python3.11");
+  });
+
+  it("rebuilds stale model-profile venvs created with Python 3.13", () => {
+    const root = mkdtempSync(join(tmpdir(), "openbrief-localai-stale-"));
+    const venvDir = join(root, "venv");
+    const python = join(venvDir, "bin", "python");
+    mkdirSync(join(venvDir, "bin"), { recursive: true });
+    writeFileSync(python, "#!/bin/sh\n");
+
+    ensureVenvPythonCompatible({
+      python,
+      venvDir,
+      profile: "tts",
+      execFile: () => "3.13.5\n",
+    });
+
+    expect(existsSync(python)).toBe(false);
   });
 
   it("pins CPU-only Torch wheels for Linux and Windows release sidecars", () => {
@@ -179,6 +230,9 @@ describe("Local AI sidecar build script", () => {
       release: true,
       execFile: (_command, args) => {
         commands.push(args.map(String));
+        if (args.includes("-c")) {
+          return "3.12.8\n";
+        }
         if (args.includes("PyInstaller")) {
           const distDir = join(root, "dist", "x86_64-unknown-linux-gnu");
           mkdirSync(distDir, { recursive: true });

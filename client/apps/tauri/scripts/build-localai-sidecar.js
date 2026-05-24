@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, statSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
@@ -15,6 +15,8 @@ const rustCrateDir = join(projectDir, "src-tauri");
 const sidecarSourceDir = join(rustCrateDir, "sidecars", "localai-python");
 const buildRoot = join(rustCrateDir, "target", "localai-sidecar");
 const sidecarBaseName = "openbrief-localai";
+const minQwenPython = [3, 9];
+const maxQwenPythonExclusive = [3, 13];
 
 export function releaseModeFromArgs(args) {
   if (args.includes("--debug")) return false;
@@ -57,6 +59,98 @@ export function buildProfileFromArgs(args) {
 
 export function pythonExecutableForPlatform(platform = process.platform) {
   return platform === "win32" ? "python" : "python3";
+}
+
+export function pythonExecutableCandidatesForPlatform({
+  platform = process.platform,
+  profile = "tts",
+  env = process.env,
+} = {}) {
+  const override = env.OPENBRIEF_LOCALAI_PYTHON;
+  if (override) {
+    return [override];
+  }
+
+  if (platform === "win32") {
+    return ["python"];
+  }
+
+  if (profile === "smoke") {
+    return [pythonExecutableForPlatform(platform)];
+  }
+
+  return ["python3.12", "python3.11", "python3.10", "python3"];
+}
+
+export function parsePythonVersion(versionText) {
+  const match = String(versionText || "").match(/(\d+)\.(\d+)\.(\d+)/);
+  if (!match) {
+    throw new Error(`Unable to parse Python version from '${versionText}'`);
+  }
+
+  return match.slice(1, 4).map(Number);
+}
+
+export function supportsQwenPythonVersion([major, minor]) {
+  const [minMajor, minMinor] = minQwenPython;
+  const [maxMajor, maxMinor] = maxQwenPythonExclusive;
+  const meetsMinimum = major > minMajor || (major === minMajor && minor >= minMinor);
+  const belowMaximum = major < maxMajor || (major === maxMajor && minor < maxMinor);
+
+  return meetsMinimum && belowMaximum;
+}
+
+export function readPythonVersion(execFile, executable) {
+  const output = execFile(
+    executable,
+    [
+      "-c",
+      "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')",
+    ],
+    { encoding: "utf8" },
+  );
+
+  return parsePythonVersion(output);
+}
+
+export function resolveBootstrapPython({
+  execFile = execFileSync,
+  platform = process.platform,
+  profile = "tts",
+  env = process.env,
+} = {}) {
+  const candidates = pythonExecutableCandidatesForPlatform({ platform, profile, env });
+  const rejected = [];
+
+  for (const candidate of candidates) {
+    try {
+      const version = readPythonVersion(execFile, candidate);
+      if (profile === "smoke" || supportsQwenPythonVersion(version)) {
+        return candidate;
+      }
+      rejected.push(`${candidate} ${version.join(".")}`);
+    } catch (error) {
+      rejected.push(`${candidate} unavailable`);
+    }
+  }
+
+  throw new Error(
+    `Local AI ${profile} sidecar builds require Python >=${minQwenPython.join(".")},<${maxQwenPythonExclusive.join(".")}. ` +
+      `Tried: ${rejected.join(", ") || candidates.join(", ")}`,
+  );
+}
+
+export function ensureVenvPythonCompatible({ execFile, python, profile, venvDir }) {
+  if (profile === "smoke" || !existsSync(python)) {
+    return;
+  }
+
+  const version = readPythonVersion(execFile, python);
+  if (supportsQwenPythonVersion(version)) {
+    return;
+  }
+
+  rmSync(venvDir, { recursive: true, force: true });
 }
 
 export function venvPythonPath(venvDir, targetTriple) {
@@ -205,10 +299,12 @@ export function buildLocalAiSidecar({
   const distDir = join(root, "dist", targetTriple);
   const workDir = join(root, "work", targetTriple);
   const specDir = join(root, "spec", targetTriple);
-  const bootstrapPython = pythonExecutableForPlatform(platform);
   const python = venvPythonPath(venvDir, targetTriple);
 
+  ensureVenvPythonCompatible({ execFile, python, profile, venvDir });
+
   if (!existsSync(python)) {
+    const bootstrapPython = resolveBootstrapPython({ execFile, platform, profile });
     execFile(bootstrapPython, ["-m", "venv", venvDir], { stdio: "inherit" });
   }
 
