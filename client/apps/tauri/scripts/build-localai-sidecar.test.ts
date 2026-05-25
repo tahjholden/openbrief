@@ -184,6 +184,12 @@ describe("Local AI sidecar build script", () => {
     expect(appleSiliconAsrArgs).not.toContain("qwen_asr");
     expect(appleSiliconAsrArgs).not.toContain("qwen-asr");
     expect(appleSiliconAsrArgs).not.toContain("torch");
+    expect(appleSiliconAsrArgs).not.toContain("transformers");
+    expect(appleSiliconAsrArgs).not.toContain("tokenizers");
+    expect(appleSiliconAsrArgs).not.toContain("safetensors");
+    expect(appleSiliconAsrArgs).not.toContain("huggingface_hub");
+    expect(appleSiliconAsrArgs).not.toContain("huggingface-hub");
+    expect(appleSiliconAsrArgs).not.toContain("soundfile");
     expect(
       pyinstallerCollectArgs({
         profile: "smoke",

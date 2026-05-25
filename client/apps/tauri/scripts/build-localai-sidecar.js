@@ -230,22 +230,19 @@ export function pyinstallerCollectArgs({ profile, targetTriple }) {
     return args;
   }
 
-  addCollectAll("huggingface_hub");
-  addCollectAll("soundfile");
-  addCollectAll("transformers");
-  addCollectAll("tokenizers");
   if (usesQwenPytorchPackage) {
+    addCollectAll("huggingface_hub");
+    addCollectAll("soundfile");
+    addCollectAll("transformers");
+    addCollectAll("tokenizers");
     addCollectAll(profile === "tts" ? "qwen_tts" : "qwen_asr");
     args.push("--hidden-import", "torch");
-  }
-
-  if (usesQwenPytorchPackage) {
     addCopyMetadata(profile === "tts" ? "qwen-tts" : "qwen-asr");
+    addCopyMetadata("transformers");
+    addCopyMetadata("huggingface-hub");
+    addCopyMetadata("tokenizers");
+    addCopyMetadata("safetensors");
   }
-  addCopyMetadata("transformers");
-  addCopyMetadata("huggingface-hub");
-  addCopyMetadata("tokenizers");
-  addCopyMetadata("safetensors");
 
   if (targetTriple === "aarch64-apple-darwin") {
     addCollectAll("mlx");
