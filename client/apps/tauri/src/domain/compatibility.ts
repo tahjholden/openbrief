@@ -1,9 +1,9 @@
-import {
-  getTarget,
-  type Architecture,
-  type DesktopPlatform,
-  type PlatformTarget,
+import type {
+  Architecture,
+  DesktopPlatform,
+  PlatformTarget,
 } from "@/domain/platform";
+import { getTarget } from "@/domain/platform";
 
 export type CompatibilitySeverity = "supported" | "warning" | "blocked";
 
@@ -68,7 +68,9 @@ export function createPlatformCompatibilityReport(
       createSttModelFeature(model, platform, architecture, target),
     ),
   ];
-  const summarySeverity = mostSevere(features.map((feature) => feature.severity));
+  const summarySeverity = mostSevere(
+    features.map((feature) => feature.severity),
+  );
 
   return {
     platform,
@@ -160,7 +162,8 @@ function createVideoDownloadFeature(
       id: "video-download",
       label: "Video download",
       severity: "blocked",
-      message: "Video download requires a packaged target and bundled helper tools.",
+      message:
+        "Video download requires a packaged target and bundled helper tools.",
     };
   }
 
@@ -255,7 +258,8 @@ function createLocalSttFeature(
       id: "local-stt",
       label: "Local transcription",
       severity: "blocked",
-      message: "Local STT requires a supported packaged target and a compatible runtime.",
+      message:
+        "Local STT requires a supported packaged target and a compatible runtime.",
     };
   }
 
@@ -295,14 +299,22 @@ function createSttModelFeature(
     };
   }
 
+  if (platform === "linux" && !isWhisperModelId(model.id)) {
+    return {
+      id: `stt-model:${model.id}`,
+      label: model.name,
+      severity: "blocked",
+      message: `${model.name} is not bundled for Linux packages. Use a Whisper model on Linux.`,
+    };
+  }
+
   const isLargeModel = model.sizeMb >= 1024 || /medium|large/i.test(model.id);
   if (platform === "linux" && architecture === "aarch64" && isLargeModel) {
     return {
       id: `stt-model:${model.id}`,
       label: model.name,
       severity: "blocked",
-      message:
-        `${model.name} is blocked on Linux ARM64 until memory and runtime smoke proves it is reliable.`,
+      message: `${model.name} is blocked on Linux ARM64 until memory and runtime smoke proves it is reliable.`,
     };
   }
 
@@ -311,8 +323,7 @@ function createSttModelFeature(
       id: `stt-model:${model.id}`,
       label: model.name,
       severity: "warning",
-      message:
-        `${model.name} is large and may be slow or memory-heavy. Use it only when accuracy matters more than speed.`,
+      message: `${model.name} is large and may be slow or memory-heavy. Use it only when accuracy matters more than speed.`,
     };
   }
 
@@ -327,7 +338,13 @@ function createSttModelFeature(
   };
 }
 
-function mostSevere(severities: CompatibilitySeverity[]): CompatibilitySeverity {
+function isWhisperModelId(modelId: string) {
+  return modelId.startsWith("whisper-") || modelId === "whisper";
+}
+
+function mostSevere(
+  severities: CompatibilitySeverity[],
+): CompatibilitySeverity {
   if (severities.includes("blocked")) return "blocked";
   if (severities.includes("warning")) return "warning";
   return "supported";

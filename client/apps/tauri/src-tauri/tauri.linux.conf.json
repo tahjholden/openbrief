@@ -1,0 +1,11 @@
+{
+  "build": {
+    "beforeBuildCommand": "pnpm build:sidecars:linux && pnpm build"
+  },
+  "bundle": {
+    "externalBin": [
+      "binaries/openbrief-helper",
+      "binaries/openbrief-supertonic"
+    ]
+  }
+}

@@ -344,7 +344,11 @@ jobs:
           NODE_OPTIONS: "--max-old-space-size=8192"
         run: |
           build_config='{"bundle":{"createUpdaterArtifacts":false}}'
-          if [[ "${{ runner.os }}" == "macOS" && "${{ inputs.notarize_macos }}" == "true" ]]; then
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            build_config="$(
+              node -e 'const fs=require("node:fs"); const config=JSON.parse(fs.readFileSync("src-tauri/tauri.linux.conf.json","utf8")); config.bundle={...config.bundle,createUpdaterArtifacts:false}; process.stdout.write(JSON.stringify(config))'
+            )"
+          elif [[ "${{ runner.os }}" == "macOS" && "${{ inputs.notarize_macos }}" == "true" ]]; then
             build_config="$(
               node -e 'process.stdout.write(JSON.stringify({bundle:{createUpdaterArtifacts:false,macOS:{signingIdentity:process.env.APPLE_SIGNING_IDENTITY,hardenedRuntime:true,entitlements:"entitlements/macos-pyinstaller-sidecars.plist"}}}))'
             )"

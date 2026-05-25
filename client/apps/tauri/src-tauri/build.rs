@@ -34,7 +34,9 @@ fn ensure_sidecar_contract() {
     } else {
         enforce_release_sidecar(&helper_sidecar_path, "helper");
         enforce_release_sidecar(&supertonic_sidecar_path, "Supertonic");
-        enforce_release_sidecar(&localai_sidecar_path, "Local AI");
+        if !target.contains("linux") {
+            enforce_release_sidecar(&localai_sidecar_path, "Local AI");
+        }
         enforce_release_fluidaudio_sidecar_if_needed();
     }
 }

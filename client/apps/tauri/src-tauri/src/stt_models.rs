@@ -194,29 +194,33 @@ pub async fn download_stt_model<R: Runtime>(
 }
 
 fn catalog_for_models_dir(models_dir: &Path) -> SttModelCatalog {
-    catalog_for_models_dir_with_fluidaudio(
+    catalog_for_models_dir_with_availability(
         models_dir,
         crate::fluidaudio::can_use_fluidaudio_sidecar(),
+        crate::qwen_asr::qwen_asr_supported_on_current_platform(),
     )
 }
 
-fn catalog_for_models_dir_with_fluidaudio(
+fn catalog_for_models_dir_with_availability(
     models_dir: &Path,
     parakeet_available: bool,
+    qwen_asr_available: bool,
 ) -> SttModelCatalog {
     let mut models = Vec::new();
-    models.extend(QWEN_ASR_MODELS.iter().map(|model| SttModelInfo {
-        id: model.id,
-        name: model.name,
-        engine: model.engine,
-        file_name: model.file_name,
-        download_url: model.download_url,
-        sha1: model.sha1,
-        size_mb: model.size_mb,
-        downloaded: crate::qwen_asr::qwen_asr_model_downloaded(models_dir, model.id),
-        downloads_on_demand: model.downloads_on_demand,
-        recommended: model.recommended,
-    }));
+    if qwen_asr_available {
+        models.extend(QWEN_ASR_MODELS.iter().map(|model| SttModelInfo {
+            id: model.id,
+            name: model.name,
+            engine: model.engine,
+            file_name: model.file_name,
+            download_url: model.download_url,
+            sha1: model.sha1,
+            size_mb: model.size_mb,
+            downloaded: crate::qwen_asr::qwen_asr_model_downloaded(models_dir, model.id),
+            downloads_on_demand: model.downloads_on_demand,
+            recommended: model.recommended,
+        }));
+    }
 
     if parakeet_available {
         models.push(SttModelInfo {
@@ -243,7 +247,7 @@ fn catalog_for_models_dir_with_fluidaudio(
         size_mb: model.size_mb,
         downloaded: models_dir.join(model.file_name).is_file(),
         downloads_on_demand: model.downloads_on_demand,
-        recommended: false,
+        recommended: model.recommended,
     }));
 
     SttModelCatalog {
@@ -254,19 +258,26 @@ fn catalog_for_models_dir_with_fluidaudio(
 }
 
 fn model_by_id(model_id: &str) -> Result<&'static SttModelDefinition, String> {
-    model_by_id_with_fluidaudio(model_id, crate::fluidaudio::can_use_fluidaudio_sidecar())
+    model_by_id_with_availability(
+        model_id,
+        crate::fluidaudio::can_use_fluidaudio_sidecar(),
+        crate::qwen_asr::qwen_asr_supported_on_current_platform(),
+    )
 }
 
-fn model_by_id_with_fluidaudio(
+fn model_by_id_with_availability(
     model_id: &str,
     parakeet_available: bool,
+    qwen_asr_available: bool,
 ) -> Result<&'static SttModelDefinition, String> {
     if parakeet_available && model_id == PARAKEET_V3_MODEL.id {
         return Ok(&PARAKEET_V3_MODEL);
     }
 
-    if let Some(model) = QWEN_ASR_MODELS.iter().find(|model| model.id == model_id) {
-        return Ok(model);
+    if qwen_asr_available {
+        if let Some(model) = QWEN_ASR_MODELS.iter().find(|model| model.id == model_id) {
+            return Ok(model);
+        }
     }
 
     WHISPER_MODELS
@@ -493,7 +504,7 @@ mod tests {
             let root = temp_models_dir();
             let parakeet_available =
                 crate::fluidaudio::can_use_fluidaudio_sidecar_for_target(os, arch, macos_major);
-            let catalog = catalog_for_models_dir_with_fluidaudio(&root, parakeet_available);
+            let catalog = catalog_for_models_dir_with_availability(&root, parakeet_available, true);
             let has_parakeet = catalog
                 .models
                 .iter()
@@ -529,16 +540,41 @@ mod tests {
     #[test]
     fn rejects_parakeet_model_id_when_fluidaudio_is_unavailable() {
         assert_eq!(
-            model_by_id_with_fluidaudio(crate::fluidaudio::PARAKEET_V3_MODEL_ID, false)
+            model_by_id_with_availability(crate::fluidaudio::PARAKEET_V3_MODEL_ID, false, true)
                 .unwrap_err(),
             "stt_model_unknown"
         );
         assert_eq!(
-            model_by_id_with_fluidaudio(crate::fluidaudio::PARAKEET_V3_MODEL_ID, true)
+            model_by_id_with_availability(crate::fluidaudio::PARAKEET_V3_MODEL_ID, true, true)
                 .unwrap()
                 .id,
             crate::fluidaudio::PARAKEET_V3_MODEL_ID
         );
+    }
+
+    #[test]
+    fn excludes_qwen_asr_when_localai_is_unavailable() {
+        let root = temp_models_dir();
+        let catalog = catalog_for_models_dir_with_availability(&root, false, false);
+
+        assert!(!catalog
+            .models
+            .iter()
+            .any(|model| model.engine == crate::qwen_asr::QWEN_ASR_ENGINE));
+        let recommended = catalog
+            .models
+            .iter()
+            .find(|model| model.recommended)
+            .unwrap();
+        assert_eq!(recommended.id, "whisper-small");
+        assert_eq!(recommended.engine, "whisper.cpp");
+        assert_eq!(
+            model_by_id_with_availability(crate::qwen_asr::QWEN_ASR_06B_MODEL_ID, false, false)
+                .unwrap_err(),
+            "stt_model_unknown"
+        );
+
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

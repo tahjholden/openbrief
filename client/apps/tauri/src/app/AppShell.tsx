@@ -1,7 +1,4 @@
-import {
-  sanitizeChatMessageTtsPathSegment,
-  type ChatContextMode,
-} from "@/domain/chat";
+import type { ChatContextMode } from "@/domain/chat";
 import type { DownloadRecoveryActionKind } from "@/domain/download-error";
 import type { CaptionLanguage } from "@/domain/helper-protocol";
 import type {
@@ -15,14 +12,6 @@ import type {
   VideoLibraryQuery,
 } from "@/domain/media-library";
 import type {
-  SettingsSnapshot,
-  VideoDownloadAccessAction,
-} from "@/domain/settings";
-import type {
-  SummaryLengthMode,
-  VideoSummaryTemplateId,
-} from "@/domain/summary";
-import type {
   PodcastDocument,
   PodcastLengthMode,
   PodcastOutputMode,
@@ -30,6 +19,14 @@ import type {
   PodcastSpeakerConfig,
 } from "@/domain/podcast";
 import type { QuizMode } from "@/domain/quiz";
+import type {
+  SettingsSnapshot,
+  VideoDownloadAccessAction,
+} from "@/domain/settings";
+import type {
+  SummaryLengthMode,
+  VideoSummaryTemplateId,
+} from "@/domain/summary";
 import type { TranscriptLanguageOption } from "@/domain/transcript-actions";
 import type { SetupDialogMode } from "@/features/setup/SetupDialog";
 import type { TranslationKey } from "@/i18n";
@@ -53,6 +50,7 @@ import { AppLayout } from "@/app/AppLayout";
 import { CopyDropdownMenuItem } from "@/components/CopyAction";
 import { FloatingMiniPlayer } from "@/components/video/FloatingMiniPlayer";
 import { VideoDownloadMenuButton } from "@/components/video/VideoDownloadMenu";
+import { sanitizeChatMessageTtsPathSegment } from "@/domain/chat";
 import {
   isSupportedLocalMediaFile,
   mediaSourceTypeFromFileName,
@@ -127,27 +125,28 @@ import {
   saveAppTheme,
 } from "@/services/themeSettingsService";
 import {
-  defaultLanguageForModel,
-  loadTtsSettings,
-  qwenPresetVoices,
-  saveTtsSettings,
-  supertonicPresetVoiceStyles,
-  supertonicPresetVoiceStyleLabel,
-  ttsEngineForModel,
-} from "@/services/ttsSettingsService";
-import {
   createTranscriptOverlayPayload,
   showTranscriptOverlay,
   transcriptOverlayHiddenEvent,
 } from "@/services/transcriptOverlayService";
-import { createVideoFrameService } from "@/services/videoFrameService";
+import {
+  defaultLanguageForModel,
+  loadTtsSettings,
+  qwenPresetVoices,
+  saveTtsSettings,
+  supertonicPresetVoiceStyleLabel,
+  supertonicPresetVoiceStyles,
+  ttsEngineForModel,
+} from "@/services/ttsSettingsService";
 import { describeVideoDownloadAccessAction } from "@/services/videoDownloadAccessNoticeService";
+import { createVideoFrameService } from "@/services/videoFrameService";
 import { listen } from "@tauri-apps/api/event";
 import { ExternalLink, Info, Loader2, Search, Volume2 } from "lucide-react";
 
 import type { TranscriptionLanguageCode } from "@acme/model-card";
 import {
   isLocalSttModelVisible,
+  isLocalTtsModelPlatformSupported,
   isSynthesisLanguageSupportedByModel,
   localTtsModelCards,
   synthesisLanguagesForModel,
@@ -346,11 +345,10 @@ export function AppShell() {
   const videoFrameService = useMemo(() => createVideoFrameService(), []);
   const activeViewRef = useRef(state.activeView);
   const chatTtsAudioRef = useRef<HTMLAudioElement | null>(null);
-  const chatTtsGenerationRef = useRef<ChatTtsGeneration | undefined>(
-    undefined,
-  );
+  const chatTtsGenerationRef = useRef<ChatTtsGeneration | undefined>(undefined);
   const podcastAudioRef = useRef<HTMLAudioElement | null>(null);
-  const [selectedPodcastAudioUrl, setSelectedPodcastAudioUrl] = useState<string>();
+  const [selectedPodcastAudioUrl, setSelectedPodcastAudioUrl] =
+    useState<string>();
   const playlistCoverService = useMemo(() => createPlaylistCoverService(), []);
   const [selectedWhisperModelId, setSelectedWhisperModelId] = useState(
     "parakeet-tdt-0.6b-v3",
@@ -531,6 +529,29 @@ export function AppShell() {
     };
   }, [configuredProviderIds, downloadedWhisperModelIds, settings]);
 
+  const localModelPlatform =
+    effectiveSettings?.versionInfo.osPlatform ?? "macos";
+  const visibleTtsModelCards = useMemo(
+    () =>
+      localTtsModelCards.filter((model) =>
+        isLocalTtsModelPlatformSupported({
+          modelId: model.id,
+          platform: localModelPlatform,
+        }),
+      ),
+    [localModelPlatform],
+  );
+  useEffect(() => {
+    const fallbackModel = visibleTtsModelCards[0];
+    if (
+      fallbackModel &&
+      !visibleTtsModelCards.some((model) => model.id === ttsModelDraft)
+    ) {
+      setTtsModelDraft(fallbackModel.id);
+      setTtsLanguageDraft(defaultLanguageForModel(fallbackModel.id));
+    }
+  }, [ttsModelDraft, visibleTtsModelCards]);
+
   const sttModels = effectiveSettings?.stt.models ?? [];
   const selectedWhisperModel = selectPreferredSttModel(
     sttModels,
@@ -588,14 +609,13 @@ export function AppShell() {
     ? (activeTranscriptVariantIdsByVideoId[selectedVideo.id] ?? "original")
     : "original";
   const selectedChatTtsLookupKey = selectedChatMessages
-    .map(
-      (message) =>
-        [
-          message.id,
-          sanitizeChatMessageTtsPathSegment(message.id),
-          message.voiceMessage?.audioPath ?? "",
-          message.voiceMessage?.generationId ?? "",
-        ].join(":"),
+    .map((message) =>
+      [
+        message.id,
+        sanitizeChatMessageTtsPathSegment(message.id),
+        message.voiceMessage?.audioPath ?? "",
+        message.voiceMessage?.generationId ?? "",
+      ].join(":"),
     )
     .join("\n");
 
@@ -2515,14 +2535,14 @@ export function AppShell() {
             <select
               id="first-read-tts-model"
               value={ttsModelDraft}
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              className="border-input bg-background h-10 w-full rounded-md border px-3 text-sm"
               onChange={(event) => {
                 const modelId = event.target.value as TtsModelId;
                 setTtsModelDraft(modelId);
                 setTtsLanguageDraft(defaultLanguageForModel(modelId));
               }}
             >
-              {localTtsModelCards.map((model) => (
+              {visibleTtsModelCards.map((model) => (
                 <option key={model.id} value={model.id}>
                   {model.name}
                 </option>
@@ -2538,12 +2558,16 @@ export function AppShell() {
                   ? ttsQwenPresetVoiceDraft
                   : ttsVoiceDraft
               }
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              className="border-input bg-background h-10 w-full rounded-md border px-3 text-sm"
               onChange={(event) => {
                 if (ttsEngineForModel(ttsModelDraft) === "qwen") {
-                  setTtsQwenPresetVoiceDraft(event.target.value as QwenPresetVoiceId);
+                  setTtsQwenPresetVoiceDraft(
+                    event.target.value as QwenPresetVoiceId,
+                  );
                 } else {
-                  setTtsVoiceDraft(event.target.value as SupertonicVoiceStyleId);
+                  setTtsVoiceDraft(
+                    event.target.value as SupertonicVoiceStyleId,
+                  );
                 }
               }}
             >
@@ -2568,7 +2592,7 @@ export function AppShell() {
             <select
               id="first-read-tts-language"
               value={ttsLanguageDraft}
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              className="border-input bg-background h-10 w-full rounded-md border px-3 text-sm"
               onChange={(event) =>
                 setTtsLanguageDraft(event.target.value as TtsLanguageCode)
               }
@@ -3057,7 +3081,7 @@ function CaptionLanguageDialog({
           </Button>
         </div>
         {activeTab === "transcribe" ? (
-          <div className="min-w-0 max-w-full overflow-hidden rounded-md border p-3">
+          <div className="max-w-full min-w-0 overflow-hidden rounded-md border p-3">
             <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
               <div className="min-w-0">
                 <div className="text-sm font-medium">
@@ -3088,14 +3112,14 @@ function CaptionLanguageDialog({
               </Button>
             </div>
             {showWhisperModelSelect ? (
-              <div className="mt-3 w-full min-w-0 max-w-[calc(100vw-5rem)] overflow-hidden sm:max-w-[22rem]">
+              <div className="mt-3 w-full max-w-[calc(100vw-5rem)] min-w-0 overflow-hidden sm:max-w-[22rem]">
                 <Select
                   value={whisperModelId}
                   onValueChange={onWhisperModelChange}
                   disabled={whisperBusy}
                 >
                   <SelectTrigger
-                    className="w-full min-w-0 max-w-full overflow-hidden pr-3 [&>span]:block [&>span]:min-w-0 [&>span]:max-w-[18rem] [&>span]:truncate [&>svg]:ml-2 [&>svg]:shrink-0"
+                    className="w-full max-w-full min-w-0 overflow-hidden pr-3 [&>span]:block [&>span]:max-w-[18rem] [&>span]:min-w-0 [&>span]:truncate [&>svg]:ml-2 [&>svg]:shrink-0"
                     aria-label={t("transcript.languageDialog.whisperModel")}
                   >
                     <SelectValue />

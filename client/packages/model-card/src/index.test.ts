@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   isLanguageSupportedByModel,
   isLocalSttModelVisible,
+  isLocalTtsModelPlatformSupported,
   isLocalTtsModelVisible,
   isSynthesisLanguageSupportedByModel,
   localSttModelCardForModel,
@@ -111,6 +112,20 @@ describe("local STT model cards", () => {
         languageCode: "ja",
         platform: "linux",
       }),
+    ).toBe(false);
+    expect(
+      isLocalSttModelVisible({
+        modelId: "parakeet-tdt-0.6b-v3",
+        languageCode: "en",
+        platform: "linux",
+      }),
+    ).toBe(false);
+    expect(
+      isLocalSttModelVisible({
+        modelId: "whisper-small",
+        languageCode: "ja",
+        platform: "linux",
+      }),
     ).toBe(true);
     expect(
       isLocalSttModelVisible({
@@ -205,6 +220,19 @@ describe("local TTS model cards", () => {
       isLocalTtsModelVisible({
         modelId: "qwen-tts-0.6B",
         languageCode: "zh",
+        platform: "linux",
+      }),
+    ).toBe(false);
+    expect(
+      isLocalTtsModelPlatformSupported({
+        modelId: "qwen-tts-1.7B",
+        platform: "linux",
+      }),
+    ).toBe(false);
+    expect(
+      isLocalTtsModelVisible({
+        modelId: "Supertone/supertonic-3",
+        languageCode: "en",
         platform: "linux",
       }),
     ).toBe(true);

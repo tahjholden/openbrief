@@ -63,12 +63,13 @@ import {
   Settings2,
 } from "lucide-react";
 
+import type { TranscriptionLanguageCode } from "@acme/model-card";
 import {
   isLocalSttModelVisible,
+  isLocalTtsModelPlatformSupported,
   isLocalTtsModelVisible,
   localTtsModelCards,
   synthesisLanguagesForModel,
-  type TranscriptionLanguageCode,
 } from "@acme/model-card";
 import { Badge } from "@acme/ui/badge";
 import { Button } from "@acme/ui/button";
@@ -285,7 +286,8 @@ export function SettingsView({
   }
 
   const localModelPlatform = settings?.versionInfo.osPlatform ?? "macos";
-  const speechLanguageCode = ttsSettings.languageCode as TranscriptionLanguageCode;
+  const speechLanguageCode =
+    ttsSettings.languageCode as TranscriptionLanguageCode;
   const recommendedSttModels = useMemo(
     () =>
       settings?.stt.models.filter(
@@ -320,7 +322,14 @@ export function SettingsView({
         platform: localModelPlatform,
       }),
     );
-    return cards.length > 0 ? cards : localTtsModelCards;
+    return cards.length > 0
+      ? cards
+      : localTtsModelCards.filter((model) =>
+          isLocalTtsModelPlatformSupported({
+            modelId: model.id,
+            platform: localModelPlatform,
+          }),
+        );
   }, [localModelPlatform, ttsSettings.languageCode]);
 
   return (
@@ -849,6 +858,22 @@ export function SettingsView({
                       />
                       <ModelGrid>
                         {recommendedSttModels.map((model) => (
+                          <ModelRow
+                            key={model.id}
+                            model={model}
+                            compatibility={settings.compatibility.features.find(
+                              (feature) =>
+                                feature.id === `stt-model:${model.id}`,
+                            )}
+                          />
+                        ))}
+                      </ModelGrid>
+                      <details className="space-y-2">
+                        <summary className="cursor-pointer text-sm font-medium">
+                          {t("settings.stt.advancedModels")}
+                        </summary>
+                        <ModelGrid className="mt-2">
+                          {advancedSttModels.map((model) => (
                             <ModelRow
                               key={model.id}
                               model={model}
@@ -858,22 +883,6 @@ export function SettingsView({
                               )}
                             />
                           ))}
-                      </ModelGrid>
-                      <details className="space-y-2">
-                        <summary className="cursor-pointer text-sm font-medium">
-                          {t("settings.stt.advancedModels")}
-                        </summary>
-                        <ModelGrid className="mt-2">
-                          {advancedSttModels.map((model) => (
-                              <ModelRow
-                                key={model.id}
-                                model={model}
-                                compatibility={settings.compatibility.features.find(
-                                  (feature) =>
-                                    feature.id === `stt-model:${model.id}`,
-                                )}
-                              />
-                            ))}
                         </ModelGrid>
                       </details>
                     </>

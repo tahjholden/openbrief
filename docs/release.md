@@ -60,10 +60,14 @@ Install Tauri Linux system dependencies first, then build:
 cd client/apps/tauri
 
 pnpm run prepare:media-assets -- --target x86_64-unknown-linux-gnu
-pnpm run build:helper-sidecar -- --target x86_64-unknown-linux-gnu
+pnpm run build:sidecars:linux
 pnpm tauri build --target x86_64-unknown-linux-gnu \
   --config '{"bundle":{"createUpdaterArtifacts":false}}'
 ```
+
+Linux releases intentionally bundle only the helper, Whisper runtime, and
+Supertonic TTS sidecar. Qwen3 ASR/TTS uses the Local AI sidecar and is excluded
+from Linux packages.
 
 The GitHub workflow uses Ubuntu 22.04 and installs:
 

@@ -29,6 +29,14 @@ pub fn is_qwen_asr_model_id(model_id: Option<&str>) -> bool {
     )
 }
 
+pub fn qwen_asr_supported_for_target_os(target_os: &str) -> bool {
+    target_os != "linux"
+}
+
+pub fn qwen_asr_supported_on_current_platform() -> bool {
+    qwen_asr_supported_for_target_os(std::env::consts::OS)
+}
+
 pub fn should_route_transcribe_to_qwen(payload: &Value) -> Result<Option<String>, String> {
     let preference = payload
         .get("enginePreference")
@@ -39,6 +47,10 @@ pub fn should_route_transcribe_to_qwen(payload: &Value) -> Result<Option<String>
 
     if !explicitly_qwen {
         return Ok(None);
+    }
+
+    if !qwen_asr_supported_on_current_platform() {
+        return Err("qwen_asr_unsupported_platform".to_string());
     }
 
     let model_id = model_id.unwrap_or(QWEN_ASR_06B_MODEL_ID);
@@ -72,6 +84,10 @@ pub async fn mark_qwen_asr_model_ready(
     models_root: &Path,
     model_id: &str,
 ) -> Result<(String, u64), String> {
+    if !qwen_asr_supported_on_current_platform() {
+        return Err("qwen_asr_unsupported_platform".to_string());
+    }
+
     if !is_qwen_asr_model_id(Some(model_id)) {
         return Err("qwen_asr_model_unknown".to_string());
     }
@@ -116,6 +132,10 @@ pub async fn run_transcribe_audio<R: Runtime>(
     models_root: &Path,
     model_id: String,
 ) -> Result<HelperRunResult, String> {
+    if !qwen_asr_supported_on_current_platform() {
+        return Err("qwen_asr_unsupported_platform".to_string());
+    }
+
     let audio_path = command
         .get("audioPath")
         .and_then(Value::as_str)
@@ -274,6 +294,13 @@ mod tests {
         assert!(qwen_asr_model_downloaded(&root, QWEN_ASR_17B_MODEL_ID));
 
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn qwen_asr_is_disabled_on_linux() {
+        assert!(!qwen_asr_supported_for_target_os("linux"));
+        assert!(qwen_asr_supported_for_target_os("macos"));
+        assert!(qwen_asr_supported_for_target_os("windows"));
     }
 
     fn write_hf_snapshot(models_root: &Path, repo_id: &str) {

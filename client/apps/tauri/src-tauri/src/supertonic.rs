@@ -289,6 +289,7 @@ fn generate_supertonic_chat_tts_blocking(
     };
 
     let (voice_style_id, output) = if is_qwen_tts_model(&model_id) {
+        ensure_qwen_tts_supported_on_current_platform()?;
         let preset_voice = sanitize_qwen_preset_voice_id(
             request.qwen_preset_voice_id.as_deref().unwrap_or("default"),
         )?;
@@ -303,10 +304,7 @@ fn generate_supertonic_chat_tts_blocking(
             &language,
             &models_root,
         );
-        (
-            preset_voice,
-            run_localai_sidecar(&app, args, &models_root)?,
-        )
+        (preset_voice, run_localai_sidecar(&app, args, &models_root)?)
     } else {
         let voice_style_id = sanitize_voice_style_id(
             request
@@ -389,6 +387,7 @@ fn generate_tts_preview_blocking(
     };
 
     let voice_id = if is_qwen_tts_model(&model_id) {
+        ensure_qwen_tts_supported_on_current_platform()?;
         let preset_voice = sanitize_qwen_preset_voice_id(
             request.qwen_preset_voice_id.as_deref().unwrap_or("default"),
         )?;
@@ -1389,6 +1388,22 @@ fn is_qwen_tts_model(model_id: &str) -> bool {
     matches!(model_id, QWEN_TTS_06B_MODEL_ID | QWEN_TTS_17B_MODEL_ID)
 }
 
+fn qwen_tts_supported_for_target_os(target_os: &str) -> bool {
+    target_os != "linux"
+}
+
+fn qwen_tts_supported_on_current_platform() -> bool {
+    qwen_tts_supported_for_target_os(std::env::consts::OS)
+}
+
+fn ensure_qwen_tts_supported_on_current_platform() -> Result<(), String> {
+    if qwen_tts_supported_on_current_platform() {
+        Ok(())
+    } else {
+        Err("qwen_tts_unsupported_platform".to_string())
+    }
+}
+
 fn sanitize_qwen_preset_voice_id(value: &str) -> Result<String, String> {
     match value.trim() {
         "default" => Ok("default".to_string()),
@@ -1438,33 +1453,45 @@ fn latest_voice_message_audio_path(
 }
 
 fn tts_voice_catalog_from_app_data(app_data: &Path) -> Vec<TtsVoiceCatalogModel> {
+    tts_voice_catalog_from_app_data_for_target(app_data, std::env::consts::OS)
+}
+
+fn tts_voice_catalog_from_app_data_for_target(
+    app_data: &Path,
+    target_os: &str,
+) -> Vec<TtsVoiceCatalogModel> {
     let supertonic_downloaded = tts_model_downloaded(app_data, MODEL_REPO_ID);
     let qwen_06b_downloaded = tts_model_downloaded(app_data, QWEN_TTS_06B_MODEL_ID);
     let qwen_17b_downloaded = tts_model_downloaded(app_data, QWEN_TTS_17B_MODEL_ID);
 
-    vec![
-        TtsVoiceCatalogModel {
-            id: MODEL_REPO_ID.to_string(),
-            name: "Supertonic 3".to_string(),
-            engine: "supertonic".to_string(),
-            downloaded: supertonic_downloaded,
-            voices: supertonic_voice_catalog(supertonic_downloaded),
-        },
-        TtsVoiceCatalogModel {
-            id: QWEN_TTS_06B_MODEL_ID.to_string(),
-            name: "Qwen3-TTS 0.6B".to_string(),
-            engine: "qwen".to_string(),
-            downloaded: qwen_06b_downloaded,
-            voices: qwen_voice_catalog(qwen_06b_downloaded),
-        },
-        TtsVoiceCatalogModel {
-            id: QWEN_TTS_17B_MODEL_ID.to_string(),
-            name: "Qwen3-TTS 1.7B".to_string(),
-            engine: "qwen".to_string(),
-            downloaded: qwen_17b_downloaded,
-            voices: qwen_voice_catalog(qwen_17b_downloaded),
-        },
-    ]
+    let mut catalog = vec![TtsVoiceCatalogModel {
+        id: MODEL_REPO_ID.to_string(),
+        name: "Supertonic 3".to_string(),
+        engine: "supertonic".to_string(),
+        downloaded: supertonic_downloaded,
+        voices: supertonic_voice_catalog(supertonic_downloaded),
+    }];
+
+    if qwen_tts_supported_for_target_os(target_os) {
+        catalog.extend([
+            TtsVoiceCatalogModel {
+                id: QWEN_TTS_06B_MODEL_ID.to_string(),
+                name: "Qwen3-TTS 0.6B".to_string(),
+                engine: "qwen".to_string(),
+                downloaded: qwen_06b_downloaded,
+                voices: qwen_voice_catalog(qwen_06b_downloaded),
+            },
+            TtsVoiceCatalogModel {
+                id: QWEN_TTS_17B_MODEL_ID.to_string(),
+                name: "Qwen3-TTS 1.7B".to_string(),
+                engine: "qwen".to_string(),
+                downloaded: qwen_17b_downloaded,
+                voices: qwen_voice_catalog(qwen_17b_downloaded),
+            },
+        ]);
+    }
+
+    catalog
 }
 
 fn supertonic_voice_catalog(downloaded: bool) -> Vec<TtsVoiceCatalogVoice> {
@@ -1690,10 +1717,9 @@ mod tests {
         assert!(args
             .windows(2)
             .any(|pair| pair[0] == "--language" && pair[1] == "en"));
-        assert!(args
-            .windows(2)
-            .any(|pair| pair[0] == "--cache-dir"
-                && pair[1] == "/tmp/openbrief/models/localai/cache"));
+        assert!(args.windows(2).any(
+            |pair| pair[0] == "--cache-dir" && pair[1] == "/tmp/openbrief/models/localai/cache"
+        ));
     }
 
     #[test]
@@ -1702,6 +1728,13 @@ mod tests {
             sanitize_qwen_tts_language("ar").unwrap_err(),
             "qwen_tts_language_unsupported"
         );
+    }
+
+    #[test]
+    fn qwen_tts_is_disabled_on_linux() {
+        assert!(!qwen_tts_supported_for_target_os("linux"));
+        assert!(qwen_tts_supported_for_target_os("macos"));
+        assert!(qwen_tts_supported_for_target_os("windows"));
     }
 
     #[test]
@@ -1723,13 +1756,32 @@ mod tests {
         fs::create_dir_all(&qwen_snapshot).unwrap();
         fs::write(qwen_snapshot.join("model.bin"), b"model").unwrap();
 
-        let catalog = tts_voice_catalog_from_app_data(&app_data);
+        let catalog = tts_voice_catalog_from_app_data_for_target(&app_data, "macos");
 
         assert_eq!(catalog[0].id, MODEL_REPO_ID);
         assert!(catalog[0].downloaded);
         assert!(catalog[0].voices.iter().all(|voice| voice.downloaded));
         assert!(catalog[1].downloaded);
         assert!(!catalog[2].downloaded);
+
+        fs::remove_dir_all(app_data).unwrap();
+    }
+
+    #[test]
+    fn linux_tts_catalog_excludes_qwen_models() {
+        let app_data = std::env::temp_dir().join(format!(
+            "openbrief-tts-linux-catalog-test-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&app_data).unwrap();
+
+        let catalog = tts_voice_catalog_from_app_data_for_target(&app_data, "linux");
+
+        assert_eq!(catalog.len(), 1);
+        assert_eq!(catalog[0].id, MODEL_REPO_ID);
 
         fs::remove_dir_all(app_data).unwrap();
     }

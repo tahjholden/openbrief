@@ -1,10 +1,10 @@
-import { describe, expect, it } from "vitest";
 import {
   createPlatformCompatibilityReport,
   getSttModelCompatibility,
   normalizeArchitecture,
   normalizeDesktopPlatform,
 } from "@/domain/compatibility";
+import { describe, expect, it } from "vitest";
 
 describe("platform compatibility", () => {
   it("normalizes Tauri OS and architecture names", () => {
@@ -44,7 +44,8 @@ describe("platform compatibility", () => {
     expect(report.targetTriple).toBe("x86_64-pc-windows-msvc");
     expect(report.summarySeverity).toBe("warning");
     expect(
-      report.features.find((feature) => feature.id === "video-download")?.message,
+      report.features.find((feature) => feature.id === "video-download")
+        ?.message,
     ).toMatch(/stale/i);
   });
 
@@ -59,9 +60,9 @@ describe("platform compatibility", () => {
 
     expect(report.targetSupported).toBe(false);
     expect(report.summarySeverity).toBe("blocked");
-    expect(report.features.find((feature) => feature.id === "target")?.severity).toBe(
-      "blocked",
-    );
+    expect(
+      report.features.find((feature) => feature.id === "target")?.severity,
+    ).toBe("blocked");
   });
 
   it("blocks large STT models on Linux ARM64 until runtime smoke exists", () => {
@@ -82,6 +83,31 @@ describe("platform compatibility", () => {
     );
     expect(getSttModelCompatibility(report, "whisper-medium")?.severity).toBe(
       "blocked",
+    );
+  });
+
+  it("blocks non-Whisper STT models on Linux packages", () => {
+    const report = createPlatformCompatibilityReport({
+      platform: "linux",
+      architecture: "x86_64",
+      downloaderStatus: "available",
+      ytdlpIsStale: false,
+      mediaTools: configuredMediaTools,
+      sttModels: [
+        { id: "qwen3-asr-0.6B", name: "Qwen3-ASR 0.6B", sizeMb: 2400 },
+        { id: "parakeet-tdt-0.6b-v3", name: "Parakeet v3", sizeMb: 1200 },
+        { id: "whisper-small", name: "Whisper Small", sizeMb: 466 },
+      ],
+    });
+
+    expect(getSttModelCompatibility(report, "qwen3-asr-0.6B")?.severity).toBe(
+      "blocked",
+    );
+    expect(
+      getSttModelCompatibility(report, "parakeet-tdt-0.6b-v3")?.severity,
+    ).toBe("blocked");
+    expect(getSttModelCompatibility(report, "whisper-small")?.severity).toBe(
+      "warning",
     );
   });
 });

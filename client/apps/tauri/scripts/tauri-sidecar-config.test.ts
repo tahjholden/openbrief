@@ -8,14 +8,18 @@ function readJson(path: string) {
 
 describe("Tauri sidecar configuration", () => {
   it("keeps FluidAudio out of the default cross-platform sidecar list", () => {
-    const config = readJson(join(process.cwd(), "src-tauri", "tauri.conf.json"));
+    const config = readJson(
+      join(process.cwd(), "src-tauri", "tauri.conf.json"),
+    );
 
     expect(config.bundle.externalBin).toEqual([
       "binaries/openbrief-helper",
       "binaries/openbrief-supertonic",
       "binaries/openbrief-localai",
     ]);
-    expect(config.bundle.externalBin).not.toContain("binaries/openbrief-fluidaudio");
+    expect(config.bundle.externalBin).not.toContain(
+      "binaries/openbrief-fluidaudio",
+    );
   });
 
   it("adds FluidAudio only in the macOS sidecar config override", () => {
@@ -29,5 +33,22 @@ describe("Tauri sidecar configuration", () => {
       "binaries/openbrief-localai",
       "binaries/openbrief-fluidaudio",
     ]);
+  });
+
+  it("limits Linux release sidecars to helper and Supertonic", () => {
+    const linuxConfig = readJson(
+      join(process.cwd(), "src-tauri", "tauri.linux.conf.json"),
+    );
+
+    expect(linuxConfig.build.beforeBuildCommand).toBe(
+      "pnpm build:sidecars:linux && pnpm build",
+    );
+    expect(linuxConfig.bundle.externalBin).toEqual([
+      "binaries/openbrief-helper",
+      "binaries/openbrief-supertonic",
+    ]);
+    expect(linuxConfig.bundle.externalBin).not.toContain(
+      "binaries/openbrief-localai",
+    );
   });
 });

@@ -1,5 +1,25 @@
+import type { CompatibilityFeature } from "@/domain/compatibility";
+import type { ProviderKind } from "@/domain/media-library";
+import type { ProviderAuthMode, SettingsSnapshot } from "@/domain/settings";
+import type { SttModelDownloadOptions } from "@/services/setupService";
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Bot, KeyRound, MessageCircle, Subtitles } from "lucide-react";
+import { getSttModelCompatibility } from "@/domain/compatibility";
+import {
+  providerLabels,
+  providerModelOptions,
+  providerOptions,
+} from "@/domain/provider";
+import { formatModelSize, isSttModelUsable } from "@/domain/settings";
+import { useI18n } from "@/i18n";
+import {
+  AlertTriangle,
+  Bot,
+  KeyRound,
+  MessageCircle,
+  Subtitles,
+} from "lucide-react";
+
+import { isLocalSttModelVisible } from "@acme/model-card";
 import { Badge } from "@acme/ui/badge";
 import { Button } from "@acme/ui/button";
 import {
@@ -11,20 +31,6 @@ import {
   DialogTitle,
 } from "@acme/ui/dialog";
 import { Input } from "@acme/ui/input";
-import {
-  getSttModelCompatibility,
-  type CompatibilityFeature,
-} from "@/domain/compatibility";
-import type { ProviderKind } from "@/domain/media-library";
-import {
-  providerLabels,
-  providerModelOptions,
-  providerOptions,
-} from "@/domain/provider";
-import { formatModelSize, isSttModelUsable } from "@/domain/settings";
-import type { ProviderAuthMode, SettingsSnapshot } from "@/domain/settings";
-import type { SttModelDownloadOptions } from "@/services/setupService";
-import { useI18n } from "@/i18n";
 
 export type SetupDialogMode = "transcription" | "summary" | "chat" | "provider";
 
@@ -43,7 +49,10 @@ type SetupDialogProps = {
     modelId: string,
     options?: SttModelDownloadOptions,
   ): Promise<unknown>;
-  onSaveProviderApiKey(provider: ProviderKind, apiKey: string): Promise<unknown>;
+  onSaveProviderApiKey(
+    provider: ProviderKind,
+    apiKey: string,
+  ): Promise<unknown>;
   onContinue(): Promise<unknown>;
 };
 
@@ -67,7 +76,9 @@ export function SetupDialog({
     useState<ProviderAuthMode>("api-key");
   const [isSaving, setIsSaving] = useState(false);
   const [isContinuing, setIsContinuing] = useState(false);
-  const [downloadingModelId, setDownloadingModelId] = useState<string | undefined>();
+  const [downloadingModelId, setDownloadingModelId] = useState<
+    string | undefined
+  >();
   const [downloadProgressPercent, setDownloadProgressPercent] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
   const [pendingCompatibilityWarning, setPendingCompatibilityWarning] =
@@ -127,7 +138,9 @@ export function SetupDialog({
       await onSaveProviderApiKey(provider, apiKey);
       return true;
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "provider_api_key_save_failed");
+      setErrorMessage(
+        error instanceof Error ? error.message : "provider_api_key_save_failed",
+      );
       return false;
     } finally {
       setIsSaving(false);
@@ -151,14 +164,19 @@ export function SetupDialog({
       });
       setDownloadProgressPercent(100);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "stt_model_download_failed");
+      setErrorMessage(
+        error instanceof Error ? error.message : "stt_model_download_failed",
+      );
     } finally {
       setDownloadingModelId(undefined);
     }
   }
 
   function requestWhisperModelDownload(modelId: string) {
-    const compatibility = getSttModelCompatibility(settings?.compatibility, modelId);
+    const compatibility = getSttModelCompatibility(
+      settings?.compatibility,
+      modelId,
+    );
     if (compatibility?.severity === "blocked") {
       setErrorMessage(compatibility.message);
       return;
@@ -219,7 +237,7 @@ export function SetupDialog({
           )}
 
           {errorMessage ? (
-            <p className="mt-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <p className="border-destructive/40 bg-destructive/10 text-destructive mt-4 rounded-md border px-3 py-2 text-sm">
               {errorMessage}
             </p>
           ) : null}
@@ -293,8 +311,17 @@ function WhisperSetup({
   onDownloadWhisperModel(modelId: string): void;
 }) {
   const { t } = useI18n();
-  const recommendedModels = settings?.stt.models.filter((model) => model.recommended) ?? [];
-  const advancedModels = settings?.stt.models.filter((model) => !model.recommended) ?? [];
+  const platform = settings?.versionInfo.osPlatform ?? "macos";
+  const visibleModels =
+    settings?.stt.models.filter((model) =>
+      isLocalSttModelVisible({
+        modelId: model.id,
+        languageCode: "auto",
+        platform,
+      }),
+    ) ?? [];
+  const recommendedModels = visibleModels.filter((model) => model.recommended);
+  const advancedModels = visibleModels.filter((model) => !model.recommended);
 
   return (
     <div className="space-y-4">
@@ -349,7 +376,11 @@ function ModelPicker({
   const { t } = useI18n();
 
   if (models.length === 0) {
-    return <p className="text-sm text-muted-foreground">{t("setup.whisper.noModels")}</p>;
+    return (
+      <p className="text-muted-foreground text-sm">
+        {t("setup.whisper.noModels")}
+      </p>
+    );
   }
 
   return (
@@ -371,7 +402,9 @@ function ModelPicker({
           <label
             key={model.id}
             className={`block rounded-md border px-3 py-2 text-sm ${
-              blocked ? "border-destructive/40 bg-destructive/5" : "border-border"
+              blocked
+                ? "border-destructive/40 bg-destructive/5"
+                : "border-border"
             }`}
           >
             <span className="flex items-center justify-between gap-3">
@@ -385,7 +418,7 @@ function ModelPicker({
                 />
                 <span className="min-w-0">
                   <span className="block font-medium">{model.name}</span>
-                  <span className="block text-xs text-muted-foreground">
+                  <span className="text-muted-foreground block text-xs">
                     {model.fileName} · {formatModelSize(model.sizeMb)}
                   </span>
                 </span>
@@ -431,15 +464,15 @@ function ModelPicker({
             ) : null}
             {isDownloading ? (
               <span className="mt-2 block">
-                <span className="mb-1 flex justify-between text-xs text-muted-foreground">
+                <span className="text-muted-foreground mb-1 flex justify-between text-xs">
                   <span>{t("setup.whisper.downloadingModel")}</span>
                   {showProgressPercent ? (
                     <span>{downloadProgressPercent}%</span>
                   ) : null}
                 </span>
-                <span className="block h-1.5 overflow-hidden rounded-full bg-muted">
+                <span className="bg-muted block h-1.5 overflow-hidden rounded-full">
                   <span
-                    className={`block h-full bg-primary ${
+                    className={`bg-primary block h-full ${
                       showProgressPercent ? "" : "animate-pulse"
                     }`}
                     style={{ width: progressWidth }}
@@ -490,8 +523,10 @@ function ProviderSetup({
           <span className="font-medium">{t("setup.provider.provider")}</span>
           <select
             value={provider}
-            onChange={(event) => onProviderChange(event.target.value as ProviderKind)}
-            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+            onChange={(event) =>
+              onProviderChange(event.target.value as ProviderKind)
+            }
+            className="border-input bg-background h-10 w-full rounded-md border px-3 text-sm"
           >
             {providerOptions.map((option) => (
               <option key={option} value={option}>
@@ -505,7 +540,7 @@ function ProviderSetup({
           <select
             value={providerModel}
             onChange={(event) => onProviderModelChange(event.target.value)}
-            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+            className="border-input bg-background h-10 w-full rounded-md border px-3 text-sm"
           >
             {modelOptions.map((model) => (
               <option key={model} value={model}>
@@ -518,7 +553,9 @@ function ProviderSetup({
 
       {supportsSubscriptionAuth ? (
         <div className="space-y-2">
-          <p className="text-sm font-medium">{t("setup.provider.authMethod")}</p>
+          <p className="text-sm font-medium">
+            {t("setup.provider.authMethod")}
+          </p>
           <div className="grid gap-2 sm:grid-cols-2">
             <AuthMethodOption
               title={t("setup.provider.chatgptSubscription")}
@@ -566,14 +603,14 @@ function AuthMethodOption({
       type="button"
       className={
         selected
-          ? "rounded-md border border-primary bg-primary/10 px-3 py-2 text-left text-sm"
-          : "rounded-md border border-border px-3 py-2 text-left text-sm hover:bg-accent"
+          ? "border-primary bg-primary/10 rounded-md border px-3 py-2 text-left text-sm"
+          : "border-border hover:bg-accent rounded-md border px-3 py-2 text-left text-sm"
       }
       aria-pressed={selected}
       onClick={onSelect}
     >
       <span className="block font-medium">{title}</span>
-      <span className="mt-1 block text-xs text-muted-foreground">
+      <span className="text-muted-foreground mt-1 block text-xs">
         {description}
       </span>
     </button>
@@ -600,9 +637,11 @@ function ApiKeyAuthPanel({
   }
 
   return (
-    <div className="rounded-md border border-border p-3">
+    <div className="border-border rounded-md border p-3">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <span className="text-sm font-medium">{t("setup.provider.apiKey")}</span>
+        <span className="text-sm font-medium">
+          {t("setup.provider.apiKey")}
+        </span>
         <Badge>
           {configured ? t("status.configured") : t("status.notConfigured")}
         </Badge>
@@ -640,7 +679,7 @@ function SubscriptionAuthPanel() {
   const { t } = useI18n();
 
   return (
-    <div className="rounded-md border border-border p-3 text-sm">
+    <div className="border-border rounded-md border p-3 text-sm">
       <div className="mb-2 flex items-center justify-between gap-3">
         <span className="flex items-center gap-2 font-medium">
           <MessageCircle className="h-4 w-4" aria-hidden="true" />

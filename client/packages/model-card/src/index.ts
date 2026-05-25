@@ -450,12 +450,34 @@ export function isLocalModelPlatformSupported(platform: string | undefined) {
   return platform === "macos" || platform === "windows" || platform === "linux";
 }
 
+export function isLocalSttModelPlatformSupported(options: {
+  modelId: string;
+  platform?: string;
+}) {
+  if (!isLocalModelPlatformSupported(options.platform)) return false;
+  if (options.platform === "linux") {
+    return localSttModelCardForModel(options.modelId).engine === "whisper.cpp";
+  }
+  return true;
+}
+
+export function isLocalTtsModelPlatformSupported(options: {
+  modelId: string;
+  platform?: string;
+}) {
+  if (!isLocalModelPlatformSupported(options.platform)) return false;
+  if (options.platform === "linux") {
+    return localTtsModelCardForModel(options.modelId).engine === "supertonic";
+  }
+  return true;
+}
+
 export function isLocalSttModelVisible(options: {
   modelId: string;
   languageCode: string;
   platform?: string;
 }) {
-  if (!isLocalModelPlatformSupported(options.platform)) return false;
+  if (!isLocalSttModelPlatformSupported(options)) return false;
   return isLanguageSupportedByModel(options.modelId, options.languageCode);
 }
 
@@ -464,7 +486,7 @@ export function isLocalTtsModelVisible(options: {
   languageCode: string;
   platform?: string;
 }) {
-  if (!isLocalModelPlatformSupported(options.platform)) return false;
+  if (!isLocalTtsModelPlatformSupported(options)) return false;
   return isSynthesisLanguageSupportedByModel(
     options.modelId,
     options.languageCode,
