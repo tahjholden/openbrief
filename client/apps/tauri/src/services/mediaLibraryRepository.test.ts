@@ -232,6 +232,33 @@ function createSnapshot(): MediaLibrarySnapshot {
       "video-1": [],
     },
     podcastJobsByVideoId: {},
+    quizzesByVideoId: {
+      "video-1": {
+        schemaVersion: 1,
+        id: "quiz-1",
+        sourceAssetId: "video-1",
+        mode: "multiple-choice",
+        questionCount: 1,
+        areaOfInterest: "design review",
+        provider: "openai",
+        createdAtIso: "2026-05-21T00:05:00.000Z",
+        title: "Design Review quiz",
+        items: [
+          {
+            id: "question-0001",
+            type: "multiple-choice",
+            question: "What changed?",
+            options: ["Media library", "Theme settings"],
+            correctOptionIndex: 0,
+          },
+        ],
+        artifactPath: "videos/video-1/quiz/quiz-1/quiz.json",
+      },
+    },
+    quizHistoryByVideoId: {
+      "video-1": [],
+    },
+    quizJobsByVideoId: {},
     playlists: [
       {
         id: "playlist-1",
@@ -246,6 +273,9 @@ function createSnapshot(): MediaLibrarySnapshot {
 
   snapshot.podcastHistoryByVideoId["video-1"] = [
     snapshot.podcastsByVideoId["video-1"],
+  ];
+  snapshot.quizHistoryByVideoId["video-1"] = [
+    snapshot.quizzesByVideoId["video-1"],
   ];
   return snapshot;
 }

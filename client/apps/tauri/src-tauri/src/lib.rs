@@ -103,8 +103,8 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let play = MenuItemBuilder::with_id("play-video", "Play").build(app)?;
     let pause = MenuItemBuilder::with_id("pause-video", "Pause").build(app)?;
     let menu = MenuBuilder::new(app).item(&play).item(&pause).build()?;
-    let icon =
-        Image::from_bytes(include_bytes!("../icons/32x32.png")).expect("failed to load tray icon");
+    let icon = Image::from_bytes(include_bytes!("../icons/tray-macos-template.png"))
+        .expect("failed to load macOS tray icon");
 
     TrayIconBuilder::new()
         .icon(icon)
@@ -191,6 +191,7 @@ pub fn run() {
             media_tools::update_yt_dlp_now,
             platform_plugins::platform_plugin_contract,
             provider::complete_provider_request,
+            provider::complete_provider_stream_request,
             show_transcript_overlay,
             stt_models::stt_model_catalog,
             stt_models::download_stt_model,

@@ -130,10 +130,10 @@ export function createTranscribeAudioCommand({
 }
 
 function qwenAsrModelIdForPath(modelPath: string) {
-  if (modelPath.includes("voicebox/qwen3-asr-1.7B")) {
+  if (modelPath.includes("localai/qwen3-asr-1.7B")) {
     return "qwen3-asr-1.7B";
   }
-  if (modelPath.includes("voicebox/qwen3-asr-0.6B")) {
+  if (modelPath.includes("localai/qwen3-asr-0.6B")) {
     return "qwen3-asr-0.6B";
   }
   return undefined;

@@ -60,6 +60,25 @@ const settings: SettingsSnapshot = {
     storage: "app-data/models",
     models: [
       {
+        id: "qwen3-asr-0.6B",
+        name: "Qwen3-ASR 0.6B + ForcedAligner",
+        engine: "qwen3-asr",
+        fileName: "localai/qwen3-asr-0.6B",
+        sizeMb: 2400,
+        downloaded: false,
+        downloadsOnDemand: true,
+        recommended: true,
+      },
+      {
+        id: "parakeet-tdt-0.6b-v3",
+        name: "Parakeet v3",
+        engine: "fluidaudio",
+        fileName: "fluid/parakeet-tdt-0.6b-v3",
+        sizeMb: 1200,
+        downloaded: false,
+        recommended: true,
+      },
+      {
         id: "whisper-small",
         name: "Whisper Small",
         engine: "whisper.cpp",
@@ -169,6 +188,12 @@ const settings: SettingsSnapshot = {
       { tool: "ffprobe", status: "configured" },
     ],
     sttModels: [
+      {
+        id: "qwen3-asr-0.6B",
+        name: "Qwen3-ASR 0.6B + ForcedAligner",
+        sizeMb: 2400,
+      },
+      { id: "parakeet-tdt-0.6b-v3", name: "Parakeet v3", sizeMb: 1200 },
       { id: "whisper-small", name: "Whisper Small", sizeMb: 466 },
       { id: "whisper-base", name: "Whisper Base", sizeMb: 142 },
     ],
@@ -251,6 +276,7 @@ describe("SettingsView", () => {
     expect(screen.getByText("TTS")).toBeInTheDocument();
     expect(screen.getByText("Whisper Small")).toBeInTheDocument();
     expect(screen.getByText("Advanced models")).toBeInTheDocument();
+    expect(screen.getByText("on demand")).toBeInTheDocument();
     expect(screen.getAllByText("not downloaded").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Qwen3-TTS 0.6B").length).toBeGreaterThan(0);
     expect(screen.getAllByText("English (en)").length).toBeGreaterThan(0);
@@ -522,6 +548,61 @@ describe("SettingsView", () => {
     });
   });
 
+  it("gates Qwen speech options by language and desktop platform", () => {
+    const { unmount } = render(
+      <SettingsView
+        settings={settings}
+        ttsSettings={{
+          ...defaultTtsSettings,
+          engine: "supertonic",
+          modelId: "Supertone/supertonic-3",
+          languageCode: "ar",
+        }}
+      />,
+    );
+
+    openSettingsTab("Speech");
+    expect(
+      screen.queryByRole("option", { name: "Qwen3-TTS 0.6B" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Qwen3-ASR 0.6B + ForcedAligner"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "Supertonic 3" }),
+    ).toBeInTheDocument();
+    unmount();
+
+    render(
+      <SettingsView
+        settings={{
+          ...settings,
+          versionInfo: {
+            ...settings.versionInfo,
+            osPlatform: "windows",
+          },
+        }}
+        ttsSettings={{
+          ...defaultTtsSettings,
+          engine: "qwen",
+          modelId: "qwen-tts-0.6B",
+          languageCode: "zh",
+        }}
+      />,
+    );
+
+    openSettingsTab("Speech");
+    expect(
+      screen.getByRole("option", { name: "Qwen3-TTS 0.6B" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Qwen3-ASR 0.6B + ForcedAligner"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: "Supertonic 3" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("runs video download access workflows from settings", () => {
     const onVideoDownloadAccessAction = vi.fn();
 
@@ -638,6 +719,9 @@ describe("SettingsView", () => {
 
     openSettingsTab("AI");
     expect(screen.getByText("System Prompts")).toBeInTheDocument();
+    expect(
+      screen.getByRole("textbox", { name: /quiz/i }),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText(/transcript review/i)).toBeInTheDocument();
     expect(
       screen.getByLabelText(/transcript translation/i),
@@ -649,6 +733,9 @@ describe("SettingsView", () => {
     fireEvent.change(screen.getByRole("textbox", { name: /^Chat\b/i }), {
       target: { value: "Custom chat prompt" },
     });
+    fireEvent.change(screen.getByRole("textbox", { name: /quiz/i }), {
+      target: { value: "Custom quiz prompt" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Save prompts" }));
 
     await waitFor(() =>
@@ -656,6 +743,7 @@ describe("SettingsView", () => {
         expect.objectContaining({
           videoSummary: "Custom summary prompt",
           chat: "Custom chat prompt",
+          quiz: "Custom quiz prompt",
           transcriptReview: defaultSystemPromptSettings.transcriptReview,
           transcriptTranslation:
             defaultSystemPromptSettings.transcriptTranslation,

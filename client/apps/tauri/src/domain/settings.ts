@@ -83,6 +83,7 @@ export type SttModelStatus = {
     fileName: string;
     sizeMb: number;
     downloaded: boolean;
+    downloadsOnDemand?: boolean;
     recommended: boolean;
   }>;
 };
@@ -141,6 +142,10 @@ export function selectPreferredSttModel(
   );
 }
 
+export function isSttModelUsable(model?: SttModelStatus["models"][number]) {
+  return Boolean(model?.downloaded || model?.downloadsOnDemand);
+}
+
 export const storageUsageCategories = [
   { category: "database", label: "Database" },
   { category: "video", label: "Video" },
@@ -182,6 +187,13 @@ export function formatStorageSize(sizeBytes: number): string {
   }
 
   return `${value.toFixed(1)} ${units[unitIndex]}`;
+}
+
+export function formatModelSize(sizeMb: number): string {
+  const safeMb = Math.max(0, Number.isFinite(sizeMb) ? sizeMb : 0);
+  if (safeMb < 1000) return `${Math.round(safeMb)} MB`;
+
+  return `${(safeMb / 1000).toFixed(1)} GB`;
 }
 
 export function formatStoragePercentage(percentage: number): string {

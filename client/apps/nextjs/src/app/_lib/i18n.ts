@@ -223,7 +223,7 @@ const englishCopy: MarketingCopy = {
       },
     ],
     releaseDescription:
-      "Verified v0.1.0 installers are available from the public GitHub release.",
+      "Verified v0.2.3 installers are available from the public GitHub release.",
     comingSoon: "Coming soon",
     openSource: {
       title: "Open source, if you want it",
@@ -356,7 +356,7 @@ const chineseCopy: MarketingCopy = {
         builds: ["x64 AppImage", "Debian 软件包", "RPM 软件包"],
       },
     ],
-    releaseDescription: "已验证的 v0.1.0 安装包可从公开的 GitHub Release 下载。",
+    releaseDescription: "已验证的 v0.2.3 安装包可从公开的 GitHub Release 下载。",
     comingSoon: "即将推出",
     openSource: {
       title: "想要的话，也可以开源",
@@ -481,7 +481,7 @@ const koreanCopy: MarketingCopy = {
       { name: "Linux", builds: ["x64 AppImage", "Debian 패키지", "RPM 패키지"] },
     ],
     releaseDescription:
-      "검증된 v0.1.0 설치 파일은 공개 GitHub 릴리스에서 받을 수 있어요.",
+      "검증된 v0.2.3 설치 파일은 공개 GitHub 릴리스에서 받을 수 있어요.",
     comingSoon: "곧 제공",
     openSource: {
       title: "원한다면, 오픈 소스로",
@@ -596,7 +596,7 @@ const japaneseCopy: MarketingCopy = {
       { name: "Linux", builds: ["x64 AppImage", "Debian パッケージ", "RPM パッケージ"] },
     ],
     releaseDescription:
-      "検証済みの v0.1.0 インストーラーは公開 GitHub リリースから入手できます。",
+      "検証済みの v0.2.3 インストーラーは公開 GitHub リリースから入手できます。",
     comingSoon: "近日公開",
     openSource: {
       title: "オープンソースという選択肢も",
@@ -711,7 +711,7 @@ const spanishCopy: MarketingCopy = {
       { name: "Linux", builds: ["AppImage x64", "Paquete Debian", "Paquete RPM"] },
     ],
     releaseDescription:
-      "Los instaladores verificados de v0.1.0 están disponibles en la release pública de GitHub.",
+      "Los instaladores verificados de v0.2.3 están disponibles en la release pública de GitHub.",
     comingSoon: "Próximamente",
     openSource: {
       title: "Código abierto, si lo quieres",
@@ -826,7 +826,7 @@ const germanCopy: MarketingCopy = {
       { name: "Linux", builds: ["x64 AppImage", "Debian-Paket", "RPM-Paket"] },
     ],
     releaseDescription:
-      "Verifizierte v0.1.0-Installer sind im öffentlichen GitHub-Release verfügbar.",
+      "Verifizierte v0.2.3-Installer sind im öffentlichen GitHub-Release verfügbar.",
     comingSoon: "Bald verfügbar",
     openSource: {
       title: "Open Source, wenn du willst",
@@ -941,7 +941,7 @@ const frenchCopy: MarketingCopy = {
       { name: "Linux", builds: ["AppImage x64", "Paquet Debian", "Paquet RPM"] },
     ],
     releaseDescription:
-      "Les installateurs vérifiés v0.1.0 sont disponibles dans la release GitHub publique.",
+      "Les installateurs vérifiés v0.2.3 sont disponibles dans la release GitHub publique.",
     comingSoon: "Bientôt disponible",
     openSource: {
       title: "Open source, si tu veux",
@@ -1056,7 +1056,7 @@ const indonesianCopy: MarketingCopy = {
       { name: "Linux", builds: ["AppImage x64", "Paket Debian", "Paket RPM"] },
     ],
     releaseDescription:
-      "Installer v0.1.0 yang sudah diverifikasi tersedia di rilis publik GitHub.",
+      "Installer v0.2.3 yang sudah diverifikasi tersedia di rilis publik GitHub.",
     comingSoon: "Segera hadir",
     openSource: {
       title: "Open source, kalau kamu mau",
@@ -1171,7 +1171,7 @@ const italianCopy: MarketingCopy = {
       { name: "Linux", builds: ["AppImage x64", "Pacchetto Debian", "Pacchetto RPM"] },
     ],
     releaseDescription:
-      "Gli installer verificati v0.1.0 sono disponibili nella release GitHub pubblica.",
+      "Gli installer verificati v0.2.3 sono disponibili nella release GitHub pubblica.",
     comingSoon: "In arrivo",
     openSource: {
       title: "Open source, se vuoi",
@@ -1286,7 +1286,7 @@ const portugueseCopy: MarketingCopy = {
       { name: "Linux", builds: ["AppImage x64", "Pacote Debian", "Pacote RPM"] },
     ],
     releaseDescription:
-      "Os instaladores verificados da v0.1.0 estão disponíveis na release pública do GitHub.",
+      "Os instaladores verificados da v0.2.3 estão disponíveis na release pública do GitHub.",
     comingSoon: "Em breve",
     openSource: {
       title: "Código aberto, se você quiser",
@@ -1401,7 +1401,7 @@ const vietnameseCopy: MarketingCopy = {
       { name: "Linux", builds: ["x64 AppImage", "Gói Debian", "Gói RPM"] },
     ],
     releaseDescription:
-      "Bộ cài v0.1.0 đã xác minh có trong bản phát hành GitHub công khai.",
+      "Bộ cài v0.2.3 đã xác minh có trong bản phát hành GitHub công khai.",
     comingSoon: "Sắp ra mắt",
     openSource: {
       title: "Mã nguồn mở, nếu bạn muốn",
@@ -1516,7 +1516,7 @@ const arabicCopy: MarketingCopy = {
       { name: "Linux", builds: ["x64 AppImage", "حزمة Debian", "حزمة RPM"] },
     ],
     releaseDescription:
-      "تتوفر مثبتات v0.1.0 التي تم التحقق منها في إصدار GitHub العام.",
+      "تتوفر مثبتات v0.2.3 التي تم التحقق منها في إصدار GitHub العام.",
     comingSoon: "قريبًا",
     openSource: {
       title: "المصدر المفتوح، إن أردت",

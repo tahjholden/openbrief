@@ -16,6 +16,12 @@ import type {
   PodcastSpeakerConfig,
 } from "@/domain/podcast";
 import type {
+  MultipleChoiceQuizItem,
+  QuizDocument,
+  QuizGenerationJob,
+  QuizMode,
+} from "@/domain/quiz";
+import type {
   SummaryLengthMode,
   SummaryOutputLanguageOption,
   VideoSummaryTemplateId,
@@ -33,7 +39,8 @@ import type {
   PodcastTtsSettings,
   TtsLanguageCode,
 } from "@/services/ttsSettingsService";
-import type { ReactNode } from "react";
+import type { VideoFramePreview } from "@/services/videoFrameService";
+import type { ReactNode, RefObject, SyntheticEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CopyActionButton } from "@/components/CopyAction";
 import { MarkdownRenderer } from "@/components/markdown/MarkdownRenderer";
@@ -50,6 +57,7 @@ import {
   providerOptions,
 } from "@/domain/provider";
 import {
+  createClickableSummaryTimestampMarkdown,
   summaryLengthModeLabels,
   summaryOutputLanguageOptions,
   videoSummaryTemplates,
@@ -83,6 +91,7 @@ import {
   RotateCcw,
   Sparkles,
   Subtitles,
+  Trash2,
   Volume2,
   X,
 } from "lucide-react";
@@ -100,6 +109,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@acme/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@acme/ui/dropdown-menu";
 import { Input } from "@acme/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@acme/ui/popover";
 import {
@@ -122,7 +137,7 @@ import {
   TooltipTrigger,
 } from "@acme/ui/tooltip";
 
-type BriefMode = "summary" | "podcast";
+type BriefMode = "summary" | "podcast" | "quiz";
 
 type WorkbenchViewProps = {
   video?: VideoAsset;
@@ -141,6 +156,9 @@ type WorkbenchViewProps = {
   podcastHistory?: PodcastDocument[];
   podcastJob?: PodcastGenerationJob;
   podcastAudioUrl?: string;
+  quiz?: QuizDocument;
+  quizHistory?: QuizDocument[];
+  quizJob?: QuizGenerationJob;
   chatMessages: ChatMessage[];
   onAddVideo?(): void;
   onSelectVideoTab?(videoId: string): void;
@@ -184,6 +202,11 @@ type WorkbenchViewProps = {
     speakers: [PodcastSpeakerConfig, PodcastSpeakerConfig];
     languageCode: TtsLanguageCode;
   }): Promise<unknown>;
+  onGenerateQuiz?(request: {
+    mode: QuizMode;
+    questionCount: number;
+    areaOfInterest: string;
+  }): Promise<unknown>;
   onPlayPodcast?(podcast: PodcastDocument): Promise<unknown> | unknown;
   onDownloadPodcastAudio?(podcast: PodcastDocument): Promise<unknown> | unknown;
   onDownloadPodcastScript?(
@@ -191,6 +214,7 @@ type WorkbenchViewProps = {
   ): Promise<unknown> | unknown;
   onDeletePodcast?(podcast: PodcastDocument): Promise<unknown> | unknown;
   isVoiceCloneModeEnabled?: boolean;
+  onUseVoiceCloneReferences?(segments: TranscriptSegment[]): void;
   chatTtsAudioByMessageId?: Record<
     string,
     SupertonicChatTtsArtifact | undefined
@@ -226,6 +250,11 @@ type WorkbenchViewProps = {
   onPlayVideo(videoId: string): void;
   onPauseVideo(videoId: string): void;
   onVideoTimeUpdate(videoId: string, currentTimeSeconds: number): void;
+  onSeekVideo(videoId: string, currentTimeSeconds: number): void;
+  onTimestampFramePreview?(
+    video: VideoAsset,
+    seconds: number,
+  ): Promise<VideoFramePreview>;
   onVideoEnded(videoId: string): void;
   onOpenPictureInPicture(videoId: string): void;
 };
@@ -247,6 +276,9 @@ export function WorkbenchView({
   podcastHistory = [],
   podcastJob,
   podcastAudioUrl,
+  quiz,
+  quizHistory = [],
+  quizJob,
   chatMessages,
   onAddVideo,
   onSelectVideoTab,
@@ -261,11 +293,13 @@ export function WorkbenchView({
   onSendChat,
   onReadChatMessage,
   onGeneratePodcast,
+  onGenerateQuiz,
   onPlayPodcast,
   onDownloadPodcastAudio,
   onDownloadPodcastScript,
   onDeletePodcast,
   isVoiceCloneModeEnabled = false,
+  onUseVoiceCloneReferences,
   chatTtsAudioByMessageId = {},
   generatingChatTtsMessageId,
   playingChatTtsMessageId,
@@ -289,6 +323,8 @@ export function WorkbenchView({
   onPlayVideo,
   onPauseVideo,
   onVideoTimeUpdate,
+  onSeekVideo,
+  onTimestampFramePreview,
   onVideoEnded,
   onOpenPictureInPicture,
 }: WorkbenchViewProps) {
@@ -302,11 +338,20 @@ export function WorkbenchView({
   const [podcastSettings, setPodcastSettings] = useState(() =>
     loadPodcastTtsSettings(),
   );
+  const podcastAudioElementRef = useRef<HTMLAudioElement | null>(null);
+  const podcastAudioSeekingRef = useRef(false);
+  const podcastAudioWasPlayingBeforeSeekRef = useRef(false);
+  const [isPodcastAudioPlaying, setIsPodcastAudioPlaying] = useState(false);
   const [podcastSourceKind, setPodcastSourceKind] =
     useState<PodcastSourceKind>("current-summary");
+  const [quizMode, setQuizMode] = useState<QuizMode>("multiple-choice");
+  const [quizQuestionCount, setQuizQuestionCount] = useState(5);
+  const [quizAreaOfInterest, setQuizAreaOfInterest] = useState("");
   const [isSummaryGenerateDialogOpen, setIsSummaryGenerateDialogOpen] =
     useState(false);
   const [isPodcastGenerateDialogOpen, setIsPodcastGenerateDialogOpen] =
+    useState(false);
+  const [isQuizGenerateDialogOpen, setIsQuizGenerateDialogOpen] =
     useState(false);
   const [briefMode, setBriefMode] = useState<BriefMode>("summary");
   const [contextMode, setContextMode] = useState<ChatContextMode>("summary");
@@ -323,6 +368,7 @@ export function WorkbenchView({
       streamingMode: chatStreamingMode,
     });
   const [pendingChatMessage, setPendingChatMessage] = useState<ChatMessage>();
+  const [isChatSubmitPending, setIsChatSubmitPending] = useState(false);
   const [readingChatMessageId, setReadingChatMessageId] = useState<string>();
   const [downloadingChatTtsMessageId, setDownloadingChatTtsMessageId] =
     useState<string>();
@@ -346,8 +392,9 @@ export function WorkbenchView({
   const transcriptListRef = useRef<HTMLOListElement | null>(null);
   const isTranscribing = transcriptJob?.status === "running";
   const isSummarizing = summaryJob?.status === "running";
-  const isSendingChat = chatJob?.status === "running";
+  const isSendingChat = chatJob?.status === "running" || isChatSubmitPending;
   const isGeneratingPodcast = podcastJob?.status === "running";
+  const isGeneratingQuiz = quizJob?.status === "running";
   const summaryProviderConfig = onSummaryProviderPreferenceChange
     ? {
         provider: summaryProvider,
@@ -371,6 +418,7 @@ export function WorkbenchView({
   const briefModeOptions = [
     { value: "summary" as const, label: t("workbench.brief.summary") },
     { value: "podcast" as const, label: t("workbench.brief.podcast") },
+    { value: "quiz" as const, label: t("workbench.brief.quiz") },
   ];
 
   useEffect(() => {
@@ -379,21 +427,55 @@ export function WorkbenchView({
     }
   }, [isVoiceCloneModeEnabled]);
 
+  useEffect(() => {
+    podcastAudioSeekingRef.current = false;
+    podcastAudioWasPlayingBeforeSeekRef.current = false;
+    setIsPodcastAudioPlaying(false);
+  }, [podcast?.id, podcastAudioUrl]);
+
   const displayedChatMessages = useMemo(() => {
-    if (!pendingChatMessage) return chatMessages;
+    const messages = [...chatMessages];
 
-    const pendingMessageIsPersisted = chatMessages.some(
-      (message) =>
-        message.role === "user" &&
-        message.videoId === pendingChatMessage.videoId &&
-        message.contextMode === pendingChatMessage.contextMode &&
-        message.content === pendingChatMessage.content,
-    );
+    if (pendingChatMessage) {
+      const pendingMessageIsPersisted = messages.some(
+        (message) =>
+          message.role === "user" &&
+          message.videoId === pendingChatMessage.videoId &&
+          message.contextMode === pendingChatMessage.contextMode &&
+          message.content === pendingChatMessage.content,
+      );
 
-    return pendingMessageIsPersisted
-      ? chatMessages
-      : [...chatMessages, pendingChatMessage];
-  }, [chatMessages, pendingChatMessage]);
+      if (!pendingMessageIsPersisted) {
+        messages.push(pendingChatMessage);
+      }
+    }
+
+    if (isSendingChat) {
+      messages.push({
+        id: `chat-running-${video?.id ?? "workspace"}`,
+        videoId: video?.id ?? "",
+        role: "assistant",
+        content:
+          chatJob?.status === "running" &&
+          chatJob.streamingMode &&
+          chatJob.draftText
+            ? chatJob.draftText
+            : t("workbench.chat.sending"),
+        contextMode,
+        createdAtIso: new Date().toISOString(),
+      });
+    }
+
+    return messages;
+  }, [
+    chatJob,
+    chatMessages,
+    contextMode,
+    isSendingChat,
+    pendingChatMessage,
+    t,
+    video?.id,
+  ]);
   const summaryTabs = normalizeSummaryTabs(summaries, summary);
   const activeTranscriptVariant = transcriptVariants.find(
     (variant) => variant.id === activeTranscriptVariantId,
@@ -418,7 +500,18 @@ export function WorkbenchView({
     summaryTabs.find((candidate) => candidate.id === activeSummaryId) ??
     summaryTabs[0] ??
     summary;
-  const summaryMarkdown = summaryJob?.draftText ?? activeSummary?.markdown;
+  const streamingSummaryDraft =
+    summaryJob?.status === "running" && summaryJob.streamingMode
+      ? summaryJob.draftText
+      : undefined;
+  const rawSummaryMarkdown = activeSummary?.markdown;
+  const summaryMarkdown = useMemo(
+    () =>
+      rawSummaryMarkdown
+        ? createClickableSummaryTimestampMarkdown(rawSummaryMarkdown)
+        : undefined,
+    [rawSummaryMarkdown],
+  );
   const sourceType = video ? mediaSourceTypeForAsset(video) : "video";
   const activeTranscriptSegmentId = useMemo(() => {
     if (
@@ -442,6 +535,17 @@ export function WorkbenchView({
     sourceType,
     video,
   ]);
+  const requestSummaryTimestampPreview = useCallback(
+    async (seconds: number) => {
+      if (!video || sourceType !== "video" || !onTimestampFramePreview) {
+        return undefined;
+      }
+
+      const preview = await onTimestampFramePreview(video, seconds);
+      return { imageUrl: preview.imageUrl };
+    },
+    [onTimestampFramePreview, sourceType, video],
+  );
 
   useEffect(() => {
     if (!activeTranscriptSegmentId) return;
@@ -608,6 +712,7 @@ export function WorkbenchView({
     if (pendingMessage) {
       setPendingChatMessage(pendingMessage);
     }
+    setIsChatSubmitPending(true);
     try {
       await onSendChat({
         question: submittedQuestion,
@@ -620,6 +725,7 @@ export function WorkbenchView({
     } catch {
       // The library hook records failed chat jobs for the Workbench status panel.
     } finally {
+      setIsChatSubmitPending(false);
       if (pendingMessage) {
         setPendingChatMessage((current) =>
           current?.id === pendingMessage.id ? undefined : current,
@@ -694,6 +800,109 @@ export function WorkbenchView({
     void generatePodcast().catch(() => {});
   }
 
+  function submitQuizGeneration() {
+    if (!onGenerateQuiz || isGeneratingQuiz) return;
+
+    setIsQuizGenerateDialogOpen(false);
+    void onGenerateQuiz({
+      mode: quizMode,
+      questionCount: quizQuestionCount,
+      areaOfInterest: quizAreaOfInterest.trim(),
+    }).catch(() => {});
+  }
+
+  function togglePodcastAudioPlayback(currentPodcast: PodcastDocument) {
+    const audio = podcastAudioElementRef.current;
+
+    if (!audio) {
+      void onPlayPodcast?.(currentPodcast);
+      return;
+    }
+
+    if (isPodcastAudioPlaying) {
+      setIsPodcastAudioPlaying(false);
+      audio.pause();
+      return;
+    }
+
+    try {
+      const playResult = audio.play();
+      void playResult?.catch(() => setIsPodcastAudioPlaying(false));
+    } catch {
+      setIsPodcastAudioPlaying(false);
+    }
+  }
+
+  function keepPodcastAudioPlaying(audio: HTMLAudioElement) {
+    if (audio.ended) return;
+
+    try {
+      const playResult = audio.play();
+      void playResult?.catch(() => setIsPodcastAudioPlaying(false));
+    } catch {
+      setIsPodcastAudioPlaying(false);
+    }
+  }
+
+  function handlePodcastAudioPlay(currentPodcast: PodcastDocument) {
+    podcastAudioSeekingRef.current = false;
+    podcastAudioWasPlayingBeforeSeekRef.current = false;
+    setIsPodcastAudioPlaying(true);
+    onPauseVideo(currentPodcast.sourceAssetId);
+  }
+
+  function handlePodcastAudioPause(
+    event: SyntheticEvent<HTMLAudioElement>,
+  ) {
+    if (
+      podcastAudioSeekingRef.current &&
+      podcastAudioWasPlayingBeforeSeekRef.current
+    ) {
+      setIsPodcastAudioPlaying(true);
+      keepPodcastAudioPlaying(event.currentTarget);
+      return;
+    }
+
+    setIsPodcastAudioPlaying(false);
+  }
+
+  function handlePodcastAudioSeeking(
+    event: SyntheticEvent<HTMLAudioElement>,
+  ) {
+    podcastAudioSeekingRef.current = true;
+    podcastAudioWasPlayingBeforeSeekRef.current =
+      isPodcastAudioPlaying ||
+      (!event.currentTarget.paused && !event.currentTarget.ended);
+
+    if (podcastAudioWasPlayingBeforeSeekRef.current) {
+      setIsPodcastAudioPlaying(true);
+    }
+  }
+
+  function handlePodcastAudioSeeked(
+    event: SyntheticEvent<HTMLAudioElement>,
+  ) {
+    const wasPlayingBeforeSeek = podcastAudioWasPlayingBeforeSeekRef.current;
+    podcastAudioSeekingRef.current = false;
+    podcastAudioWasPlayingBeforeSeekRef.current = false;
+
+    if (wasPlayingBeforeSeek) {
+      setIsPodcastAudioPlaying(true);
+      keepPodcastAudioPlaying(event.currentTarget);
+      return;
+    }
+
+    setIsPodcastAudioPlaying(
+      !event.currentTarget.paused && !event.currentTarget.ended,
+    );
+  }
+
+  function handlePodcastAudioEnded() {
+    podcastAudioSeekingRef.current = false;
+    podcastAudioWasPlayingBeforeSeekRef.current = false;
+    setIsPodcastAudioPlaying(false);
+  }
+
   async function downloadChatTtsAudio(
     message: ChatMessage,
     audio: SupertonicChatTtsArtifact,
@@ -734,6 +943,12 @@ export function WorkbenchView({
 
     onPlayVideo(video.id);
     onVideoTimeUpdate(video.id, segment.startSeconds);
+  }
+
+  function seekToSummaryTimestamp(seconds: number) {
+    if (!video || sourceType === "pdf") return;
+
+    onSeekVideo(video.id, seconds);
   }
 
   function startTranscriptEdit(segment: TranscriptSegment) {
@@ -898,17 +1113,38 @@ export function WorkbenchView({
                           })}
                         </span>
                         {voiceCloneTranscriptSegmentIds.length > 0 ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2"
-                            onClick={() =>
-                              setVoiceCloneTranscriptSegmentIds([])
-                            }
-                          >
-                            {t("workbench.transcript.voiceCloneClear")}
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            {onUseVoiceCloneReferences ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 px-2"
+                                onClick={() => {
+                                  const selectedSegments = renderedTranscript.filter(
+                                    (segment) =>
+                                      voiceCloneTranscriptSegmentIds.includes(
+                                        segment.id,
+                                      ),
+                                  );
+                                  onUseVoiceCloneReferences(selectedSegments);
+                                }}
+                              >
+                                {t("workbench.transcript.voiceCloneUse")}
+                              </Button>
+                            ) : null}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2"
+                              onClick={() =>
+                                setVoiceCloneTranscriptSegmentIds([])
+                              }
+                            >
+                              {t("workbench.transcript.voiceCloneClear")}
+                            </Button>
+                          </div>
                         ) : null}
                       </div>
                     ) : null}
@@ -1137,7 +1373,6 @@ export function WorkbenchView({
                     languageCode={summaryLanguage.code}
                     isGenerating={isSummarizing}
                     disabled={renderedTranscript.length === 0}
-                    triggerVariant="outline"
                     onOpenChange={setIsSummaryGenerateDialogOpen}
                     onTemplateChange={setSummaryTemplateId}
                     onLengthChange={setSummaryLengthMode}
@@ -1146,20 +1381,50 @@ export function WorkbenchView({
                   />
                 ) : null}
                 {briefMode === "podcast" && podcast ? (
-                  <PodcastGenerateDialog
-                    open={isPodcastGenerateDialogOpen}
-                    podcastHistoryCount={podcastHistory.length}
-                    settings={podcastSettings}
-                    sourceKind={podcastSourceKind}
-                    canGenerate={Boolean(onGeneratePodcast && video)}
-                    hasSummary={Boolean(activeSummary)}
-                    hasTranscript={transcript.length > 0}
-                    isGenerating={isGeneratingPodcast}
-                    triggerVariant="outline"
-                    onOpenChange={setIsPodcastGenerateDialogOpen}
-                    onSettingsChange={setPodcastSettings}
-                    onSourceKindChange={setPodcastSourceKind}
-                    onGenerate={submitPodcastGeneration}
+                  <PodcastHeaderActions
+                    podcast={podcast}
+                    generateAction={
+                      <PodcastGenerateDialog
+                        open={isPodcastGenerateDialogOpen}
+                        podcastHistoryCount={podcastHistory.length}
+                        settings={podcastSettings}
+                        sourceKind={podcastSourceKind}
+                        canGenerate={Boolean(onGeneratePodcast && video)}
+                        hasSummary={Boolean(activeSummary)}
+                        hasTranscript={transcript.length > 0}
+                        isGenerating={isGeneratingPodcast}
+                        onOpenChange={setIsPodcastGenerateDialogOpen}
+                        onSettingsChange={setPodcastSettings}
+                        onSourceKindChange={setPodcastSourceKind}
+                        onGenerate={submitPodcastGeneration}
+                      />
+                    }
+                    isPlaying={isPodcastAudioPlaying}
+                    onTogglePlayback={
+                      podcastAudioUrl || onPlayPodcast
+                        ? () => togglePodcastAudioPlayback(podcast)
+                        : undefined
+                    }
+                    onDownloadPodcastAudio={onDownloadPodcastAudio}
+                    onDownloadPodcastScript={onDownloadPodcastScript}
+                    onDeletePodcast={onDeletePodcast}
+                  />
+                ) : null}
+                {briefMode === "quiz" && quiz ? (
+                  <QuizGenerateDialog
+                    open={isQuizGenerateDialogOpen}
+                    mode={quizMode}
+                    questionCount={quizQuestionCount}
+                    areaOfInterest={quizAreaOfInterest}
+                    quizHistoryCount={quizHistory.length}
+                    canGenerate={Boolean(onGenerateQuiz && video)}
+                    hasSource={Boolean(activeSummary || renderedTranscript.length > 0)}
+                    isGenerating={isGeneratingQuiz}
+                    onOpenChange={setIsQuizGenerateDialogOpen}
+                    onModeChange={setQuizMode}
+                    onQuestionCountChange={setQuizQuestionCount}
+                    onAreaOfInterestChange={setQuizAreaOfInterest}
+                    onGenerate={submitQuizGeneration}
                   />
                 ) : null}
               </div>
@@ -1198,8 +1463,11 @@ export function WorkbenchView({
                         failedLabel={t("workbench.summary.failed")}
                       />
                     ) : null}
-                    {summaryMarkdown ? (
+                    {streamingSummaryDraft ? (
+                      <StreamingSummaryDraft draftText={streamingSummaryDraft} />
+                    ) : summaryMarkdown ? (
                       <SummaryMarkdownPanel
+                        key={activeSummary?.id ?? "summary"}
                         summaryId={activeSummary?.id}
                         markdown={summaryMarkdown}
                         editable={Boolean(
@@ -1209,6 +1477,10 @@ export function WorkbenchView({
                         onCommitMarkdown={onUpdateSummaryMarkdown}
                         saveLabel={t("workbench.summary.save")}
                         saveDisabled={isSummarizing}
+                        onTimestampClick={seekToSummaryTimestamp}
+                        onTimestampPreviewRequest={
+                          requestSummaryTimestampPreview
+                        }
                         onSaveMarkdown={
                           activeSummary
                             ? () => onSaveMarkdown(activeSummary.id)
@@ -1237,7 +1509,7 @@ export function WorkbenchView({
                     ) : null}
                   </div>
                 </>
-              ) : (
+              ) : briefMode === "podcast" ? (
                 <PodcastBriefPanel
                   podcast={podcast}
                   podcastHistory={podcastHistory}
@@ -1246,6 +1518,7 @@ export function WorkbenchView({
                   sourceKind={podcastSourceKind}
                   hasSummary={Boolean(activeSummary)}
                   hasTranscript={transcript.length > 0}
+                  audioRef={podcastAudioElementRef}
                   generateAction={
                     <PodcastGenerateDialog
                       open={isPodcastGenerateDialogOpen}
@@ -1264,13 +1537,37 @@ export function WorkbenchView({
                   }
                   onAudioPlay={
                     podcast
-                      ? () => onPauseVideo(podcast.sourceAssetId)
+                      ? () => handlePodcastAudioPlay(podcast)
                       : undefined
                   }
-                  onPlayPodcast={onPlayPodcast}
-                  onDownloadPodcastAudio={onDownloadPodcastAudio}
-                  onDownloadPodcastScript={onDownloadPodcastScript}
-                  onDeletePodcast={onDeletePodcast}
+                  onAudioPause={handlePodcastAudioPause}
+                  onAudioSeeking={handlePodcastAudioSeeking}
+                  onAudioSeeked={handlePodcastAudioSeeked}
+                  onAudioEnded={handlePodcastAudioEnded}
+                />
+              ) : (
+                <QuizBriefPanel
+                  quiz={quiz}
+                  quizHistory={quizHistory}
+                  quizJob={quizJob}
+                  hasSource={Boolean(activeSummary || renderedTranscript.length > 0)}
+                  generateAction={
+                    <QuizGenerateDialog
+                      open={isQuizGenerateDialogOpen}
+                      mode={quizMode}
+                      questionCount={quizQuestionCount}
+                      areaOfInterest={quizAreaOfInterest}
+                      quizHistoryCount={quizHistory.length}
+                      canGenerate={Boolean(onGenerateQuiz && video)}
+                      hasSource={Boolean(activeSummary || renderedTranscript.length > 0)}
+                      isGenerating={isGeneratingQuiz}
+                      onOpenChange={setIsQuizGenerateDialogOpen}
+                      onModeChange={setQuizMode}
+                      onQuestionCountChange={setQuizQuestionCount}
+                      onAreaOfInterestChange={setQuizAreaOfInterest}
+                      onGenerate={submitQuizGeneration}
+                    />
+                  }
                 />
               )}
             </CardContent>
@@ -1361,8 +1658,11 @@ export function WorkbenchView({
                           isDownloadingTts={
                             downloadingChatTtsMessageId === message.id
                           }
+                          isPending={message.id.startsWith("chat-running-")}
                           onRead={
-                            onReadChatMessage && message.role !== "user"
+                            onReadChatMessage &&
+                            message.role !== "user" &&
+                            !message.id.startsWith("chat-running-")
                               ? (renderedText) =>
                                   void readChatMessage(message, renderedText)
                               : undefined
@@ -1389,17 +1689,12 @@ export function WorkbenchView({
                     })}
                   </ol>
                 )}
-                {chatJob ? (
+                {chatJob?.status === "failed" ? (
                   <AiGenerationStatus
                     job={chatJob}
                     runningLabel={t("workbench.chat.sending")}
                     failedLabel={t("workbench.chat.failed")}
                   />
-                ) : null}
-                {chatJob?.status === "running" &&
-                chatJob.streamingMode &&
-                chatJob.draftText ? (
-                  <StreamingChatDraft draftText={chatJob.draftText} />
                 ) : null}
               </div>
               <div className="mt-auto grid gap-2">
@@ -1510,6 +1805,114 @@ function BriefEmptyState({
   );
 }
 
+function PodcastHeaderActions({
+  podcast,
+  generateAction,
+  isPlaying,
+  onTogglePlayback,
+  onDownloadPodcastAudio,
+  onDownloadPodcastScript,
+  onDeletePodcast,
+}: {
+  podcast: PodcastDocument;
+  generateAction: ReactNode;
+  isPlaying: boolean;
+  onTogglePlayback?(): void;
+  onDownloadPodcastAudio?(podcast: PodcastDocument): Promise<unknown> | unknown;
+  onDownloadPodcastScript?(
+    podcast: PodcastDocument,
+  ): Promise<unknown> | unknown;
+  onDeletePodcast?(podcast: PodcastDocument): Promise<unknown> | unknown;
+}) {
+  const { t } = useI18n();
+  const hasDownloadAction = Boolean(
+    onDownloadPodcastAudio || onDownloadPodcastScript,
+  );
+
+  return (
+    <TooltipProvider delayDuration={150}>
+      <div className="flex flex-wrap items-center gap-2">
+        {generateAction}
+        {onTogglePlayback ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onTogglePlayback}
+          >
+            {isPlaying ? (
+              <Pause className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <Play className="h-4 w-4" aria-hidden="true" />
+            )}
+            {isPlaying
+              ? t("workbench.podcast.pause")
+              : t("workbench.podcast.play")}
+          </Button>
+        ) : null}
+        {hasDownloadAction ? (
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9"
+                    aria-label={t("workbench.podcast.download")}
+                  >
+                    <Download className="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {t("workbench.podcast.download")}
+              </TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent side="bottom" align="end" className="w-44">
+              {onDownloadPodcastAudio ? (
+                <DropdownMenuItem
+                  onClick={() => void onDownloadPodcastAudio(podcast)}
+                >
+                  <Download className="mr-2 h-4 w-4" aria-hidden="true" />
+                  {t("workbench.podcast.downloadAudio")}
+                </DropdownMenuItem>
+              ) : null}
+              {onDownloadPodcastScript ? (
+                <DropdownMenuItem
+                  onClick={() => void onDownloadPodcastScript(podcast)}
+                >
+                  <FileText className="mr-2 h-4 w-4" aria-hidden="true" />
+                  {t("workbench.podcast.downloadScript")}
+                </DropdownMenuItem>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
+        {onDeletePodcast ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 text-destructive hover:text-destructive"
+                aria-label={t("workbench.podcast.delete")}
+                onClick={() => void onDeletePodcast(podcast)}
+              >
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {t("workbench.podcast.delete")}
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
+      </div>
+    </TooltipProvider>
+  );
+}
+
 function PodcastBriefPanel({
   podcast,
   podcastHistory,
@@ -1518,12 +1921,13 @@ function PodcastBriefPanel({
   sourceKind,
   hasSummary,
   hasTranscript,
+  audioRef,
   generateAction,
   onAudioPlay,
-  onPlayPodcast,
-  onDownloadPodcastAudio,
-  onDownloadPodcastScript,
-  onDeletePodcast,
+  onAudioPause,
+  onAudioSeeking,
+  onAudioSeeked,
+  onAudioEnded,
 }: {
   podcast?: PodcastDocument;
   podcastHistory: PodcastDocument[];
@@ -1532,17 +1936,15 @@ function PodcastBriefPanel({
   sourceKind: PodcastSourceKind;
   hasSummary: boolean;
   hasTranscript: boolean;
+  audioRef: RefObject<HTMLAudioElement | null>;
   generateAction: ReactNode;
   onAudioPlay?(): void;
-  onPlayPodcast?(podcast: PodcastDocument): Promise<unknown> | unknown;
-  onDownloadPodcastAudio?(podcast: PodcastDocument): Promise<unknown> | unknown;
-  onDownloadPodcastScript?(
-    podcast: PodcastDocument,
-  ): Promise<unknown> | unknown;
-  onDeletePodcast?(podcast: PodcastDocument): Promise<unknown> | unknown;
+  onAudioPause?(event: SyntheticEvent<HTMLAudioElement>): void;
+  onAudioSeeking?(event: SyntheticEvent<HTMLAudioElement>): void;
+  onAudioSeeked?(event: SyntheticEvent<HTMLAudioElement>): void;
+  onAudioEnded?(): void;
 }) {
   const { t } = useI18n();
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [currentAudioTime, setCurrentAudioTime] = useState(0);
   const sourceAvailable =
     sourceKind === "current-summary" ? hasSummary : hasTranscript;
@@ -1617,52 +2019,6 @@ function PodcastBriefPanel({
             </span>
           ) : null}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {podcast ? (
-            <>
-              {onPlayPodcast ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void onPlayPodcast(podcast)}
-                >
-                  <Play className="mr-2 h-4 w-4" aria-hidden="true" />
-                  {t("workbench.podcast.play")}
-                </Button>
-              ) : null}
-              {onDownloadPodcastAudio ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void onDownloadPodcastAudio(podcast)}
-                >
-                  <Download className="mr-2 h-4 w-4" aria-hidden="true" />
-                  {t("workbench.podcast.downloadAudio")}
-                </Button>
-              ) : null}
-              {onDownloadPodcastScript ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void onDownloadPodcastScript(podcast)}
-                >
-                  <FileText className="mr-2 h-4 w-4" aria-hidden="true" />
-                  {t("workbench.podcast.downloadScript")}
-                </Button>
-              ) : null}
-              {onDeletePodcast ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => void onDeletePodcast(podcast)}
-                >
-                  <X className="mr-2 h-4 w-4" aria-hidden="true" />
-                  {t("workbench.podcast.delete")}
-                </Button>
-              ) : null}
-            </>
-          ) : null}
-        </div>
         {podcast && podcastAudioUrl ? (
           <audio
             ref={audioRef}
@@ -1671,12 +2027,16 @@ function PodcastBriefPanel({
             preload="metadata"
             src={podcastAudioUrl}
             onPlay={onAudioPlay}
+            onPause={onAudioPause}
+            onSeeking={onAudioSeeking}
+            onEnded={onAudioEnded}
             onTimeUpdate={(event) =>
               setCurrentAudioTime(event.currentTarget.currentTime)
             }
-            onSeeked={(event) =>
-              setCurrentAudioTime(event.currentTarget.currentTime)
-            }
+            onSeeked={(event) => {
+              setCurrentAudioTime(event.currentTarget.currentTime);
+              onAudioSeeked?.(event);
+            }}
           />
         ) : null}
         {podcast ? (
@@ -1726,6 +2086,375 @@ function PodcastBriefPanel({
       </div>
     </div>
   );
+}
+
+function QuizBriefPanel({
+  quiz,
+  quizHistory,
+  quizJob,
+  hasSource,
+  generateAction,
+}: {
+  quiz?: QuizDocument;
+  quizHistory: QuizDocument[];
+  quizJob?: QuizGenerationJob;
+  hasSource: boolean;
+  generateAction: ReactNode;
+}) {
+  const { t } = useI18n();
+
+  if (!quiz && !quizJob) {
+    return (
+      <BriefEmptyState
+        action={generateAction}
+        description={
+          hasSource
+            ? t("workbench.quiz.empty")
+            : t("workbench.quiz.sourceRequired")
+        }
+      />
+    );
+  }
+
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="grid gap-4 pb-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <Sparkles className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="font-medium">{t("workbench.quiz.title")}</span>
+            {quizHistory.length > 1 ? (
+              <span className="text-muted-foreground text-xs">
+                {t("workbench.quiz.history", {
+                  count: quizHistory.length,
+                })}
+              </span>
+            ) : null}
+          </div>
+          {quizJob ? (
+            <span className="text-muted-foreground text-xs">
+              {quizJob.status === "running"
+                ? t("workbench.quiz.generating")
+                : t("workbench.quiz.failed")}
+            </span>
+          ) : null}
+        </div>
+        {quiz ? (
+          <div className="grid gap-3">
+            <div className="rounded-md border bg-muted/20 px-3 py-2">
+              <div className="font-medium">{quiz.title}</div>
+              <div className="text-muted-foreground mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                <span>{t(quizModeLabelKey(quiz.mode))}</span>
+                <span>
+                  {t("workbench.quiz.questions", {
+                    count: quiz.items.length,
+                  })}
+                </span>
+                {quiz.areaOfInterest ? <span>{quiz.areaOfInterest}</span> : null}
+              </div>
+              {quiz.description ? (
+                <p className="text-muted-foreground mt-2 text-sm">
+                  {quiz.description}
+                </p>
+              ) : null}
+            </div>
+            <ol className="grid gap-3">
+              {quiz.items.map((item, index) => (
+                <li key={`${quiz.id}-${item.id}`}>
+                  {item.type === "multiple-choice" ? (
+                    <MultipleChoiceQuizCard item={item} index={index} />
+                  ) : (
+                    <FlashCardQuizCard item={item} index={index} />
+                  )}
+                </li>
+              ))}
+            </ol>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function MultipleChoiceQuizCard({
+  item,
+  index,
+}: {
+  item: MultipleChoiceQuizItem;
+  index: number;
+}) {
+  const { t } = useI18n();
+  const [selectedOptionIndex, setSelectedOptionIndex] = useState<number | null>(
+    null,
+  );
+  const hasAnswered = selectedOptionIndex !== null;
+  const selectedIsCorrect = selectedOptionIndex === item.correctOptionIndex;
+  const correctOption = item.options[item.correctOptionIndex] ?? "";
+
+  return (
+    <div className="rounded-md border px-3 py-3 text-sm">
+      <div className="mb-3 flex gap-2 font-medium">
+        <span className="text-muted-foreground shrink-0">
+          {index + 1}.
+        </span>
+        <span>{item.question}</span>
+      </div>
+      <ol className="grid gap-2">
+        {item.options.map((option, optionIndex) => {
+          const isCorrect = optionIndex === item.correctOptionIndex;
+          const isSelected = optionIndex === selectedOptionIndex;
+
+          return (
+            <li key={`${item.id}-${optionIndex}`}>
+              <button
+                type="button"
+                className={cn(
+                  "flex w-full items-start gap-2 rounded-md border px-2 py-1.5 text-left transition-colors",
+                  !hasAnswered
+                    ? "bg-muted/20 hover:bg-muted/40"
+                    : "bg-muted/10",
+                  hasAnswered && isCorrect
+                    ? "border-emerald-300 bg-emerald-50 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100"
+                    : "",
+                  hasAnswered && isSelected && !isCorrect
+                    ? "border-destructive/40 bg-destructive/10 text-destructive"
+                    : "",
+                  hasAnswered && !isSelected && !isCorrect
+                    ? "text-muted-foreground"
+                    : "",
+                )}
+                disabled={hasAnswered}
+                onClick={() => setSelectedOptionIndex(optionIndex)}
+              >
+                <span className="text-muted-foreground shrink-0">
+                  {String.fromCharCode(65 + optionIndex)}
+                </span>
+                <span className="min-w-0 flex-1">{option}</span>
+                {hasAnswered && isCorrect ? (
+                  <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
+                ) : null}
+                {hasAnswered && isSelected && !isCorrect ? (
+                  <X className="h-4 w-4 shrink-0" aria-hidden="true" />
+                ) : null}
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+      {hasAnswered ? (
+        <div className="mt-3 grid gap-1 text-xs leading-relaxed">
+          <p
+            className={cn(
+              "font-medium",
+              selectedIsCorrect
+                ? "text-emerald-700 dark:text-emerald-300"
+                : "text-destructive",
+            )}
+          >
+            {selectedIsCorrect
+              ? t("workbench.quiz.correct")
+              : t("workbench.quiz.incorrect")}
+          </p>
+          {correctOption ? (
+            <p className="text-muted-foreground">
+              {t("workbench.quiz.answer", { answer: correctOption })}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+      {hasAnswered && item.explanation ? (
+        <p className="text-muted-foreground mt-3 text-xs leading-relaxed">
+          {item.explanation}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function FlashCardQuizCard({
+  item,
+  index,
+}: {
+  item: Exclude<QuizDocument["items"][number], MultipleChoiceQuizItem>;
+  index: number;
+}) {
+  const { t } = useI18n();
+  const [isRevealed, setIsRevealed] = useState(false);
+
+  return (
+    <div className="grid gap-2 rounded-md border px-3 py-3 text-sm">
+      <div className="flex gap-2 font-medium">
+        <span className="text-muted-foreground shrink-0">
+          {index + 1}.
+        </span>
+        <span>{item.front}</span>
+      </div>
+      {isRevealed ? (
+        <div className="rounded-md bg-muted/50 px-3 py-2 leading-relaxed">
+          {t("workbench.quiz.answer", { answer: item.back })}
+        </div>
+      ) : (
+        <Button
+          type="button"
+          variant="outline"
+          className="justify-self-start"
+          onClick={() => setIsRevealed(true)}
+        >
+          {t("workbench.quiz.showAnswer")}
+        </Button>
+      )}
+      {isRevealed && item.explanation ? (
+        <p className="text-muted-foreground text-xs leading-relaxed">
+          {item.explanation}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function QuizGenerateDialog({
+  open,
+  mode,
+  questionCount,
+  areaOfInterest,
+  quizHistoryCount,
+  canGenerate,
+  hasSource,
+  isGenerating,
+  triggerVariant = "default",
+  onOpenChange,
+  onModeChange,
+  onQuestionCountChange,
+  onAreaOfInterestChange,
+  onGenerate,
+}: {
+  open: boolean;
+  mode: QuizMode;
+  questionCount: number;
+  areaOfInterest: string;
+  quizHistoryCount: number;
+  canGenerate: boolean;
+  hasSource: boolean;
+  isGenerating: boolean;
+  triggerVariant?: "default" | "outline" | "ghost";
+  onOpenChange(open: boolean): void;
+  onModeChange(mode: QuizMode): void;
+  onQuestionCountChange(count: number): void;
+  onAreaOfInterestChange(areaOfInterest: string): void;
+  onGenerate(): void;
+}) {
+  const { t } = useI18n();
+  const normalizedQuestionCount = Math.min(
+    50,
+    Math.max(1, Math.trunc(questionCount || 1)),
+  );
+  const submitDisabled = !canGenerate || !hasSource || isGenerating;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogTrigger asChild>
+        <Button
+          type="button"
+          variant={triggerVariant}
+          disabled={!canGenerate || isGenerating}
+        >
+          {isGenerating ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <Sparkles className="mr-2 h-4 w-4" aria-hidden="true" />
+          )}
+          {isGenerating
+            ? t("workbench.quiz.generating")
+            : t("workbench.quiz.generate")}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{t("workbench.quiz.generate")}</DialogTitle>
+          <DialogDescription>
+            {t("workbench.quiz.dialog.description")}
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          className="grid gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (submitDisabled) return;
+            onQuestionCountChange(normalizedQuestionCount);
+            onGenerate();
+          }}
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
+            <PodcastSelect
+              label={t("workbench.quiz.mode")}
+              value={mode}
+              options={[
+                {
+                  value: "multiple-choice",
+                  label: t("workbench.quiz.mode.multipleChoice"),
+                },
+                {
+                  value: "flash-card",
+                  label: t("workbench.quiz.mode.flashCard"),
+                },
+              ]}
+              onChange={(value) => onModeChange(value as QuizMode)}
+            />
+            <label className="text-muted-foreground grid gap-1 text-xs">
+              <span>{t("workbench.quiz.questionCount")}</span>
+              <Input
+                type="number"
+                min={1}
+                max={50}
+                value={questionCount}
+                onChange={(event) =>
+                  onQuestionCountChange(
+                    Math.min(
+                      50,
+                      Math.max(1, Math.trunc(event.currentTarget.valueAsNumber || 1)),
+                    ),
+                  )
+                }
+              />
+            </label>
+          </div>
+          <label className="text-muted-foreground grid gap-1 text-xs">
+            <span>{t("workbench.quiz.areaOfInterest")}</span>
+            <Textarea
+              value={areaOfInterest}
+              rows={3}
+              placeholder={t("workbench.quiz.areaOfInterest.placeholder")}
+              onChange={(event) =>
+                onAreaOfInterestChange(event.currentTarget.value)
+              }
+            />
+          </label>
+          {!hasSource ? (
+            <p className="text-muted-foreground text-xs">
+              {t("workbench.quiz.sourceRequired")}
+            </p>
+          ) : null}
+          {quizHistoryCount > 1 ? (
+            <p className="text-muted-foreground text-xs">
+              {t("workbench.quiz.history", { count: quizHistoryCount })}
+            </p>
+          ) : null}
+          <DialogFooter>
+            <Button type="submit" disabled={submitDisabled}>
+              <Bot className="mr-2 h-4 w-4" aria-hidden="true" />
+              {t("workbench.quiz.generate")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function quizModeLabelKey(mode: QuizMode): TranslationKey {
+  return mode === "flash-card"
+    ? "workbench.quiz.mode.flashCard"
+    : "workbench.quiz.mode.multipleChoice";
 }
 
 function SummaryGenerateDialog({
@@ -1840,7 +2569,7 @@ function PodcastGenerateDialog({
   hasSummary,
   hasTranscript,
   isGenerating,
-  triggerVariant = "outline",
+  triggerVariant = "default",
   onOpenChange,
   onSettingsChange,
   onSourceKindChange,
@@ -2090,6 +2819,8 @@ function SummaryMarkdownPanel({
   onCommitMarkdown,
   saveLabel,
   saveDisabled = false,
+  onTimestampClick,
+  onTimestampPreviewRequest,
   onSaveMarkdown,
 }: {
   summaryId?: string;
@@ -2099,6 +2830,10 @@ function SummaryMarkdownPanel({
   onCommitMarkdown?(summaryId: string, markdown: string): void;
   saveLabel: string;
   saveDisabled?: boolean;
+  onTimestampClick?(seconds: number): void;
+  onTimestampPreviewRequest?(
+    seconds: number,
+  ): Promise<{ imageUrl: string } | undefined>;
   onSaveMarkdown?(): void;
 }) {
   const [draftMarkdown, setDraftMarkdown] = useState(markdown);
@@ -2181,6 +2916,8 @@ function SummaryMarkdownPanel({
           ) : undefined
         }
         onMarkdownChange={setDraftMarkdown}
+        onTimestampClick={onTimestampClick}
+        onTimestampPreviewRequest={onTimestampPreviewRequest}
       />
     </div>
   );
@@ -2219,7 +2956,10 @@ function ChatQuestionForm({
         className="min-w-0 flex-1"
       />
       <Button type="submit" disabled={isSending || !trimmedQuestion}>
-        {isSending ? t("workbench.chat.sending") : t("workbench.chat.send")}
+        {isSending ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+        ) : null}
+        {t("workbench.chat.send")}
       </Button>
     </form>
   );
@@ -2232,6 +2972,7 @@ function ChatBubble({
   isPlayingTts = false,
   isStartingTts = false,
   isDownloadingTts = false,
+  isPending = false,
   ttsAudio,
   onRead,
   onPlayTtsAudio,
@@ -2244,6 +2985,7 @@ function ChatBubble({
   isPlayingTts?: boolean;
   isStartingTts?: boolean;
   isDownloadingTts?: boolean;
+  isPending?: boolean;
   ttsAudio?: SupertonicChatTtsArtifact;
   onRead?(renderedText: string): void;
   onPlayTtsAudio?(audio: SupertonicChatTtsArtifact): void;
@@ -2255,7 +2997,8 @@ function ChatBubble({
   const [isActionRegionFocused, setIsActionRegionFocused] = useState(false);
   const [isActionRegionHovered, setIsActionRegionHovered] = useState(false);
   const hasUsage = Boolean(message.tokenUsage);
-  const showActions = isLast || isActionRegionFocused || isActionRegionHovered;
+  const showActions =
+    !isPending && (isLast || isActionRegionFocused || isActionRegionHovered);
   const renderedText = () =>
     renderedChatTextFromElement(contentRef.current, message.content);
 
@@ -2549,12 +3292,10 @@ function sanitizeChatTtsMessagePathSegment(value: string) {
   return sanitized || "item";
 }
 
-function StreamingChatDraft({ draftText }: { draftText: string }) {
+function StreamingSummaryDraft({ draftText }: { draftText: string }) {
   return (
-    <div className="flex items-start">
-      <div className="bg-muted text-foreground max-w-[88%] rounded-lg px-3 py-2 text-sm leading-relaxed">
-        <MarkdownRenderer markdown={draftText} />
-      </div>
+    <div className="min-h-full px-3 text-sm leading-relaxed">
+      <MarkdownRenderer markdown={draftText} />
     </div>
   );
 }
@@ -2885,61 +3626,88 @@ function TranscriptActionPanel({
           </SelectContent>
         </Select>
       </div>
-      <div className="openbrief-transcript-actions grid grid-cols-3 gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="openbrief-transcript-action-button min-w-0 gap-1.5"
-          disabled={isReviewing}
-          aria-label={
-            isReviewing
-              ? t("workbench.transcript.review.running")
-              : t("workbench.transcript.review")
-          }
-          onClick={onReview}
-        >
-          <Sparkles className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="openbrief-transcript-action-label truncate">
-            {isReviewing
-              ? t("workbench.transcript.review.running")
-              : t("workbench.transcript.review")}
-          </span>
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="openbrief-transcript-action-button min-w-0 gap-1.5"
-          disabled={isTranslating}
-          aria-label={
-            isTranslating
-              ? t("workbench.transcript.translate.running")
-              : t("workbench.transcript.translate")
-          }
-          onClick={onTranslate}
-        >
-          <Languages className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="openbrief-transcript-action-label truncate">
-            {isTranslating
-              ? t("workbench.transcript.translate.running")
-              : t("workbench.transcript.translate")}
-          </span>
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="openbrief-transcript-action-button min-w-0 gap-1.5"
-          aria-label={t("workbench.transcript.overlay")}
-          onClick={onOverlay}
-        >
-          <Eye className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="openbrief-transcript-action-label truncate">
-            {t("workbench.transcript.overlay")}
-          </span>
-        </Button>
-      </div>
+      <TooltipProvider delayDuration={150}>
+        <div className="openbrief-transcript-actions grid grid-cols-3 gap-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="openbrief-transcript-action-button min-w-0 gap-1.5"
+                disabled={isReviewing}
+                aria-label={
+                  isReviewing
+                    ? t("workbench.transcript.review.running")
+                    : t("workbench.transcript.review")
+                }
+                onClick={onReview}
+              >
+                <Sparkles className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="openbrief-transcript-action-label truncate">
+                  {isReviewing
+                    ? t("workbench.transcript.review.running")
+                    : t("workbench.transcript.review")}
+                </span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {isReviewing
+                ? t("workbench.transcript.review.running")
+                : t("workbench.transcript.review.tooltip")}
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="openbrief-transcript-action-button min-w-0 gap-1.5"
+                disabled={isTranslating}
+                aria-label={
+                  isTranslating
+                    ? t("workbench.transcript.translate.running")
+                    : t("workbench.transcript.translate")
+                }
+                onClick={onTranslate}
+              >
+                <Languages className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="openbrief-transcript-action-label truncate">
+                  {isTranslating
+                    ? t("workbench.transcript.translate.running")
+                    : t("workbench.transcript.translate")}
+                </span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {isTranslating
+                ? t("workbench.transcript.translate.running")
+                : t("workbench.transcript.translate.tooltip")}
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="openbrief-transcript-action-button min-w-0 gap-1.5"
+                aria-label={t("workbench.transcript.overlay")}
+                onClick={onOverlay}
+              >
+                <Eye className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="openbrief-transcript-action-label truncate">
+                  {t("workbench.transcript.overlay")}
+                </span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {t("workbench.transcript.overlay.tooltip")}
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      </TooltipProvider>
       <Dialog
         open={translateDialogOpen}
         onOpenChange={onTranslateDialogOpenChange}

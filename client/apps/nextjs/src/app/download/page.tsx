@@ -8,17 +8,17 @@ import { Button } from "@acme/ui/button";
 
 const releaseDownloads = [
   [
-    "https://github.com/tantara/openbrief/releases/download/v0.1.0/OpenBrief_0.1.0_aarch64.dmg",
-    "https://github.com/tantara/openbrief/releases/download/v0.1.0/OpenBrief_0.1.0_x64.dmg",
+    "https://github.com/tantara/openbrief/releases/download/v0.2.3/OpenBrief_0.2.3_aarch64.dmg",
+    "https://github.com/tantara/openbrief/releases/download/v0.2.3/OpenBrief_0.2.3_x64.dmg",
   ],
   [
-    "https://github.com/tantara/openbrief/releases/download/v0.1.0/OpenBrief_0.1.0_x64-setup.exe",
+    "https://github.com/tantara/openbrief/releases/download/v0.2.3/OpenBrief_0.2.3_x64-setup.exe",
     undefined,
   ],
   [
-    "https://github.com/tantara/openbrief/releases/download/v0.1.0/OpenBrief_0.1.0_amd64.AppImage",
-    "https://github.com/tantara/openbrief/releases/download/v0.1.0/OpenBrief_0.1.0_amd64.deb",
-    "https://github.com/tantara/openbrief/releases/download/v0.1.0/OpenBrief-0.1.0-1.x86_64.rpm",
+    undefined,
+    "https://github.com/tantara/openbrief/releases/download/v0.2.3/OpenBrief_0.2.3_amd64.deb",
+    undefined,
   ],
 ] as const;
 

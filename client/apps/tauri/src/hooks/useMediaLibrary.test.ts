@@ -779,6 +779,7 @@ describe("useMediaLibrary", () => {
         .mockResolvedValueOnce(firstSummary)
         .mockResolvedValueOnce(secondSummary),
       generatePodcastScript: vi.fn(),
+      generateQuiz: vi.fn(),
       sendChat: vi.fn().mockResolvedValue([]),
       reviewTranscript: vi.fn().mockResolvedValue([]),
       translateTranscript: vi.fn(),
@@ -845,6 +846,7 @@ describe("useMediaLibrary", () => {
     const summaryChatService: SummaryChatService = {
       generateSummary: vi.fn(() => summaryResult.promise),
       generatePodcastScript: vi.fn(),
+      generateQuiz: vi.fn(),
       sendChat: vi.fn(() => chatResult.promise),
       reviewTranscript: vi.fn().mockResolvedValue([]),
       translateTranscript: vi.fn(),
@@ -957,6 +959,7 @@ describe("useMediaLibrary", () => {
     const summaryChatService: SummaryChatService = {
       generateSummary: vi.fn(),
       generatePodcastScript: vi.fn(),
+      generateQuiz: vi.fn(),
       sendChat: vi.fn((request) => {
         request.onTextSnapshot?.("Draft chat answer");
         return chatResult.promise;
@@ -1002,6 +1005,81 @@ describe("useMediaLibrary", () => {
       chatResult.resolve([]);
       await chatPromise;
     });
+  });
+
+  it("coalesces rapid streaming summary drafts", async () => {
+    vi.useFakeTimers();
+    try {
+      const video: VideoAsset = {
+        id: "video-1",
+        title: "Design Review",
+        sourceKind: "youtube",
+        originalUri: "https://youtu.be/example",
+        libraryPath: "videos/video-1/video.mp4",
+        importStatus: "ready",
+        createdAtIso: "2026-05-21T00:00:00.000Z",
+      };
+      const summaryResult = deferred<SummaryDocument>();
+      const summaryChatService: SummaryChatService = {
+        generateSummary: vi.fn((request) => {
+          request.onTextSnapshot?.("Draft 1");
+          request.onTextSnapshot?.("Draft 2");
+          request.onTextSnapshot?.("Draft 3");
+          return summaryResult.promise;
+        }),
+        generatePodcastScript: vi.fn(),
+        generateQuiz: vi.fn(),
+        sendChat: vi.fn().mockResolvedValue([]),
+        reviewTranscript: vi.fn().mockResolvedValue([]),
+        translateTranscript: vi.fn(),
+        createMarkdownSave: vi.fn(() => ({
+          suggestedFileName: "design-review.md",
+          markdown: "# Summary",
+        })),
+      };
+      const { result } = renderHook(() =>
+        useMediaLibrary(
+          [video],
+          undefined,
+          undefined,
+          summaryChatService,
+        ),
+      );
+
+      let summaryPromise!: Promise<SummaryDocument>;
+      await act(async () => {
+        summaryPromise = result.current.generateSummary("video-1", "openai", undefined, {
+          streamingMode: true,
+        });
+        await Promise.resolve();
+      });
+
+      expect(result.current.state.summaryJobsByVideoId["video-1"]).toMatchObject({
+        draftText: "Draft 1",
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(100);
+      });
+
+      expect(result.current.state.summaryJobsByVideoId["video-1"]).toMatchObject({
+        draftText: "Draft 3",
+      });
+
+      await act(async () => {
+        summaryResult.resolve({
+          id: "summary-video-1",
+          videoId: "video-1",
+          markdown: "# Summary",
+          provider: "openai",
+          sourceSegmentCount: 0,
+          createdAtIso: "2026-05-21T00:00:00.000Z",
+        });
+        await summaryPromise;
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("starts a new visible chat session while preserving previous messages", async () => {
@@ -1199,7 +1277,7 @@ describe("useMediaLibrary", () => {
     const lastSnapshot = savedSnapshots[savedSnapshots.length - 1];
 
     expect(lastSnapshot?.summariesByVideoId["video-1"]?.artifactPath).toContain(
-      "videos/video-1/summary/Design-Review-summary-",
+      "videos/video-1/summary/summary-video-1-",
     );
     expect(lastSnapshot?.summaryHistoryByVideoId["video-1"]).toHaveLength(1);
     expect(lastSnapshot?.chatMessagesByVideoId["video-1"]?.[0]).toMatchObject({

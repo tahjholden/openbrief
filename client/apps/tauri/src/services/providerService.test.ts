@@ -126,6 +126,94 @@ describe("provider service", () => {
     expect(resolveCredential).not.toHaveBeenCalled();
   });
 
+  it("continues provider output when the response stops at max tokens", async () => {
+    const httpClient = vi
+      .fn<ProviderHttpClient>()
+      .mockResolvedValueOnce({
+        status: 200,
+        body: {
+          choices: [
+            {
+              finish_reason: "length",
+              message: { content: "Part one. " },
+            },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 200,
+        body: {
+          choices: [
+            {
+              finish_reason: "stop",
+              message: { content: "Part two." },
+            },
+          ],
+        },
+      });
+    const service = createLiveProviderService({
+      httpClient,
+      resolveCredential: vi.fn().mockResolvedValue("openai-live-secret"),
+    });
+
+    const result = await service.complete({
+      provider: "openai",
+      operation: "summary",
+      systemPrompt: "Summarize.",
+      userPrompt: "Transcript",
+      generationParams: { maxTokens: 8 },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      text: "Part one. Part two.",
+      finishReason: "stop",
+    });
+    expect(httpClient).toHaveBeenCalledTimes(2);
+    expect(httpClient.mock.calls[1]?.[0].body).toMatchObject({
+      messages: [
+        { role: "system", content: "Summarize." },
+        { role: "user", content: "Transcript" },
+        { role: "assistant", content: "Part one. " },
+        {
+          role: "user",
+          content: expect.stringContaining("Continue exactly where"),
+        },
+      ],
+    });
+  });
+
+  it("passes streaming snapshots through live provider clients", async () => {
+    const httpClient = vi.fn<ProviderHttpClient>(async (_request, options) => {
+      options?.onTextSnapshot?.("Partial");
+      return {
+        status: 200,
+        body: {
+          openbriefText: "Final",
+          openbriefFinishReason: "stop",
+        },
+      };
+    });
+    const service = createLiveProviderService({
+      httpClient,
+      resolveCredential: vi.fn().mockResolvedValue("openai-live-secret"),
+    });
+    const onTextSnapshot = vi.fn();
+
+    const result = await service.complete({
+      provider: "openai",
+      operation: "chat",
+      systemPrompt: "Answer.",
+      userPrompt: "Question",
+      streamingMode: true,
+      onTextSnapshot,
+    });
+
+    expect(result).toMatchObject({ ok: true, text: "Final" });
+    expect(onTextSnapshot).toHaveBeenCalledWith("Partial");
+    expect(onTextSnapshot).toHaveBeenCalledWith("Final");
+  });
+
   it("redacts live provider diagnostics before returning failures", async () => {
     const secret = "openai-live-secret";
     const service = createLiveProviderService({
@@ -207,6 +295,9 @@ function expectProviderRequestShape(
       expect(request.headers.Authorization).toBe(`Bearer ${secret}`);
       expect(request.body).toMatchObject({
         model: "gpt-5.4-mini",
+        temperature: 0.2,
+        top_p: 0.9,
+        max_tokens: 2048,
         messages: [
           { role: "system", content: "System instructions" },
           { role: "user", content: "User question" },
@@ -219,7 +310,9 @@ function expectProviderRequestShape(
       expect(request.headers["anthropic-version"]).toBe("2023-06-01");
       expect(request.body).toMatchObject({
         model: "claude-sonnet-4-6",
-        max_tokens: 1200,
+        max_tokens: 2048,
+        temperature: 0.2,
+        top_p: 0.9,
         system: "System instructions",
         messages: [{ role: "user", content: "User question" }],
       });
@@ -230,6 +323,11 @@ function expectProviderRequestShape(
       );
       expect(request.headers["x-goog-api-key"]).toBe(secret);
       expect(request.body).toEqual({
+        generationConfig: {
+          temperature: 0.2,
+          topP: 0.9,
+          maxOutputTokens: 2048,
+        },
         contents: [
           {
             role: "user",
@@ -245,6 +343,9 @@ function expectProviderRequestShape(
       expect(request.headers["X-Title"]).toBe("OpenBrief");
       expect(request.body).toMatchObject({
         model: "deepseek/deepseek-v4-flash",
+        temperature: 0.2,
+        top_p: 0.9,
+        max_tokens: 2048,
         messages: [
           { role: "system", content: "System instructions" },
           { role: "user", content: "User question" },

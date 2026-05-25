@@ -21,6 +21,7 @@ import {
   providerModelOptions,
   providerOptions,
 } from "@/domain/provider";
+import { formatModelSize, isSttModelUsable } from "@/domain/settings";
 import type { ProviderAuthMode, SettingsSnapshot } from "@/domain/settings";
 import type { SttModelDownloadOptions } from "@/services/setupService";
 import { useI18n } from "@/i18n";
@@ -81,7 +82,7 @@ export function SetupDialog({
   const providerConfigured = Boolean(providerStatus?.configured);
   const isTranscription = mode === "transcription";
   const canContinue = isTranscription
-    ? Boolean(selectedWhisperModel?.downloaded)
+    ? isSttModelUsable(selectedWhisperModel)
     : providerConfigured;
 
   useEffect(() => {
@@ -385,7 +386,7 @@ function ModelPicker({
                 <span className="min-w-0">
                   <span className="block font-medium">{model.name}</span>
                   <span className="block text-xs text-muted-foreground">
-                    {model.fileName} · {model.sizeMb} MB
+                    {model.fileName} · {formatModelSize(model.sizeMb)}
                   </span>
                 </span>
               </span>
@@ -395,9 +396,11 @@ function ModelPicker({
                     ? t("setup.whisper.downloaded")
                     : isDownloading
                       ? t("setup.whisper.downloading")
-                      : t("setup.whisper.notDownloaded")}
+                      : model.downloadsOnDemand
+                        ? t("setup.whisper.downloadsOnDemand")
+                        : t("setup.whisper.notDownloaded")}
                 </Badge>
-                {!model.downloaded ? (
+                {!model.downloaded && !model.downloadsOnDemand ? (
                   <Button
                     type="button"
                     size="sm"

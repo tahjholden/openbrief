@@ -231,13 +231,20 @@ export const en_us = {
   "workbench.transcript.variant.original": "Original transcript",
   "workbench.transcript.variant.reviewed": "Reviewed transcript",
   "workbench.transcript.review": "Review",
+  "workbench.transcript.review.tooltip":
+    "Proofread and improve the transcription",
   "workbench.transcript.review.running": "Reviewing...",
   "workbench.transcript.translate": "Translate",
+  "workbench.transcript.translate.tooltip":
+    "Translate the transcript to a new language",
   "workbench.transcript.overlay": "Overlay",
+  "workbench.transcript.overlay.tooltip":
+    "Open the transcription in a separate overlay window",
   "workbench.transcript.voiceCloneSelection":
     "Voice clone reference blocks: {count}/3",
   "workbench.transcript.voiceCloneToggle":
     "Use transcript block at {time} for voice cloning",
+  "workbench.transcript.voiceCloneUse": "Use as voice",
   "workbench.transcript.voiceCloneClear": "Clear",
   "transcriptOverlay.window": "Transcript overlay",
   "transcriptOverlay.close": "Close transcript overlay",
@@ -278,6 +285,7 @@ export const en_us = {
   "workbench.brief.title": "Brief",
   "workbench.brief.summary": "Summary",
   "workbench.brief.podcast": "Podcast",
+  "workbench.brief.quiz": "Quiz",
   "workbench.summary.title": "Summary",
   "workbench.summary.provider": "Summary provider",
   "workbench.summary.model": "Provider model",
@@ -325,6 +333,8 @@ export const en_us = {
   "workbench.podcast.empty":
     "Generate a podcast to create narrated audio and a turn-by-turn script.",
   "workbench.podcast.play": "Play",
+  "workbench.podcast.pause": "Pause",
+  "workbench.podcast.download": "Download podcast",
   "workbench.podcast.downloadAudio": "Download audio",
   "workbench.podcast.downloadScript": "Download script",
   "workbench.podcast.delete": "Delete",
@@ -337,6 +347,25 @@ export const en_us = {
   "workbench.podcast.stage.tts": "Rendering voices...",
   "workbench.podcast.stage.complete": "Complete",
   "workbench.podcast.failed": "Podcast failed",
+  "workbench.quiz.title": "Quiz",
+  "workbench.quiz.history": "{count} versions",
+  "workbench.quiz.mode": "Type",
+  "workbench.quiz.mode.multipleChoice": "Multiple choice",
+  "workbench.quiz.mode.flashCard": "Flash card",
+  "workbench.quiz.questionCount": "Questions",
+  "workbench.quiz.questions": "{count} questions",
+  "workbench.quiz.areaOfInterest": "Area of interest",
+  "workbench.quiz.areaOfInterest.placeholder": "Focus the quiz on a topic, chapter, concept, or skill.",
+  "workbench.quiz.generate": "Generate quiz",
+  "workbench.quiz.dialog.description": "Choose a quiz type, question count, and focus area before generation.",
+  "workbench.quiz.generating": "Generating quiz...",
+  "workbench.quiz.empty": "Generate a quiz from the current summary or transcript.",
+  "workbench.quiz.sourceRequired": "Generate a summary or extract a transcript first.",
+  "workbench.quiz.failed": "Quiz failed",
+  "workbench.quiz.correct": "Correct",
+  "workbench.quiz.incorrect": "Not quite",
+  "workbench.quiz.answer": "Answer: {answer}",
+  "workbench.quiz.showAnswer": "Show answer",
   "workbench.chat.title": "Chat",
   "workbench.chat.with": "with",
   "workbench.chat.context": "Chat context",
@@ -532,8 +561,13 @@ export const en_us = {
   "notice.artifactExport.success": "Exported to {path}",
   "notice.artifactExport.failed": "Export failed: {message}",
   "notice.supertonic.failed": "Could not read chat message: {message}",
+  "notice.quiz.failed": "Quiz generation failed: {message}",
   "notice.supertonic.busy":
     "Voice generation is already running. Wait until the current generation is done.",
+  "notice.voiceClone.selectVideo":
+    "Open an audio or video with a transcript, then choose up to 3 transcript blocks for voice cloning.",
+  "notice.voiceClone.referencesSelected":
+    "{count} reference block(s) selected for Qwen3 voice cloning.",
   "notice.openLocation.failed": "Could not open location: {message}",
   "settings.loading": "Loading settings...",
   "settings.tabs.label": "Settings sections",
@@ -634,6 +668,7 @@ export const en_us = {
   "settings.stt.automatic": "Automatic",
   "settings.stt.advancedModels": "Advanced models",
   "settings.stt.downloaded": "downloaded",
+  "settings.stt.downloadsOnDemand": "on demand",
   "settings.stt.notDownloaded": "not downloaded",
   "settings.tts.engine": "Engine",
   "settings.tts.model": "Model",
@@ -659,6 +694,20 @@ export const en_us = {
   "voices.preview.download": "Download",
   "voices.preview.ready": "Preview ready ({size})",
   "voices.cloneVoice": "Clone voice",
+  "voices.cloneOnboarding.title": "Clone a Qwen3 voice",
+  "voices.cloneOnboarding.description":
+    "Set up Qwen3-TTS voice cloning from existing transcript blocks.",
+  "voices.cloneOnboarding.downloadCheckpoint": "Download checkpoint",
+  "voices.cloneOnboarding.downloadCheckpointDescription":
+    "OpenBrief downloads the selected Qwen3-TTS checkpoint on demand through the Local AI sidecar.",
+  "voices.cloneOnboarding.pickTranscription": "Pick transcript blocks",
+  "voices.cloneOnboarding.pickTranscriptionDescription":
+    "Choose up to 3 adjacent transcript blocks from an audio or video source.",
+  "voices.cloneOnboarding.useVoice": "Use it as voice",
+  "voices.cloneOnboarding.useVoiceDescription":
+    "The selected blocks become the reference voice for Qwen3 read-aloud generation.",
+  "voices.cloneOnboarding.cancel": "Cancel",
+  "voices.cloneOnboarding.start": "Pick transcript blocks",
   "voices.usage.title": "How you can use voice",
   "voices.usage.description":
     "The selected voice is used by read-aloud actions across OpenBrief.",
@@ -693,6 +742,9 @@ export const en_us = {
   "settings.prompts.chat": "Chat",
   "settings.prompts.chatDescription":
     "Used when answering questions from summary or transcript context.",
+  "settings.prompts.quiz": "Quiz",
+  "settings.prompts.quizDescription":
+    "Used when generating multiple-choice quizzes and flash cards from the current summary or transcript.",
   "settings.prompts.transcriptReview": "Transcript review",
   "settings.prompts.transcriptReviewDescription":
     "Used when proofreading and correcting local speech-to-text segments.",
@@ -723,6 +775,7 @@ export const en_us = {
   "setup.whisper.noModels": "No models reported yet.",
   "setup.whisper.downloaded": "downloaded",
   "setup.whisper.downloading": "downloading",
+  "setup.whisper.downloadsOnDemand": "on demand",
   "setup.whisper.notDownloaded": "not downloaded",
   "setup.whisper.download": "Download",
   "setup.whisper.downloadingModel": "Downloading model",

@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openbrief-localai"
+version = "0.1.0"
+description = "OpenBrief Local AI sidecar for Qwen3-TTS"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+qwen-tts = [
+  "accelerate>=0.26",
+  "huggingface_hub>=0.34",
+  "numba>=0.60,<0.61",
+  "numpy>=1.26",
+  "qwen-tts>=0.0.5",
+  "soundfile>=0.12",
+]
+qwen-asr = [
+  "accelerate>=0.26",
+  "huggingface_hub>=0.34",
+  "numba>=0.60,<0.61",
+  "numpy>=1.26",
+  "qwen-asr>=0.0.6",
+  "soundfile>=0.12",
+]
+torch = [
+  "torch>=2.2,<2.3; platform_system == 'Darwin' and platform_machine == 'x86_64'",
+  "torch>=2.4; platform_system != 'Darwin' or platform_machine != 'x86_64'",
+]
+mlx = [
+  "huggingface_hub>=1.0; platform_system == 'Darwin' and platform_machine == 'arm64'",
+  "hf-xet>=1.4.3,<2.0.0; platform_system == 'Darwin' and platform_machine == 'arm64'",
+  "mlx>=0.31.1; platform_system == 'Darwin' and platform_machine == 'arm64'",
+  "mlx-lm>=0.31.1; platform_system == 'Darwin' and platform_machine == 'arm64'",
+  "miniaudio>=1.61; platform_system == 'Darwin' and platform_machine == 'arm64'",
+  "numpy>=1.26.4,<2.0; platform_system == 'Darwin' and platform_machine == 'arm64'",
+  "scipy>=1.10.0; platform_system == 'Darwin' and platform_machine == 'arm64'",
+  "sentencepiece>=0.2.0; platform_system == 'Darwin' and platform_machine == 'arm64'",
+  "sounddevice>=0.5.3; platform_system == 'Darwin' and platform_machine == 'arm64'",
+  "soynlp>=0.0.493; platform_system == 'Darwin' and platform_machine == 'arm64'",
+  "tqdm>=4.67.1; platform_system == 'Darwin' and platform_machine == 'arm64'",
+  "transformers>=5.5.0; platform_system == 'Darwin' and platform_machine == 'arm64'",
+]
+
+[project.scripts]
+openbrief-localai = "openbrief_localai:main"
+
+[tool.setuptools]
+py-modules = ["openbrief_localai"]

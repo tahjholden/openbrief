@@ -15,7 +15,7 @@ const __dirname = dirname(__filename);
 export const SIDECAR_BASE_NAMES = [
   "openbrief-helper",
   "openbrief-supertonic",
-  "openbrief-voicebox",
+  "openbrief-localai",
 ];
 export const MIN_REAL_BINARY_SIZE_BYTES = 10000;
 export const SUPPORTED_HELPER_TARGET_TRIPLES = [

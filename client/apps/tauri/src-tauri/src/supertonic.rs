@@ -12,7 +12,7 @@ use tauri_plugin_shell::ShellExt;
 const RUNNER_SCRIPT: &str = include_str!("../sidecars/supertonic-python/openbrief_supertonic.py");
 const SUPERTONIC_PACKAGE: &str = "supertonic>=1.3.1";
 const SUPERTONIC_EXTERNAL_BIN_PATH: &str = "openbrief-supertonic";
-const VOICEBOX_EXTERNAL_BIN_PATH: &str = "openbrief-voicebox";
+const LOCALAI_EXTERNAL_BIN_PATH: &str = "openbrief-localai";
 const MODEL_REPO_ID: &str = "Supertone/supertonic-3";
 const QWEN_TTS_06B_MODEL_ID: &str = "qwen-tts-0.6B";
 const QWEN_TTS_17B_MODEL_ID: &str = "qwen-tts-1.7B";
@@ -292,9 +292,9 @@ fn generate_supertonic_chat_tts_blocking(
         let preset_voice = sanitize_qwen_preset_voice_id(
             request.qwen_preset_voice_id.as_deref().unwrap_or("default"),
         )?;
-        let models_root = app_data.join("models").join("voicebox");
+        let models_root = app_data.join("models").join("localai");
         fs::create_dir_all(models_root.join("hf"))
-            .map_err(|error| format!("voicebox_model_dir_create_failed:{error}"))?;
+            .map_err(|error| format!("localai_model_dir_create_failed:{error}"))?;
         let args = qwen_tts_read_args(
             text,
             &output_path,
@@ -305,7 +305,7 @@ fn generate_supertonic_chat_tts_blocking(
         );
         (
             preset_voice,
-            run_voicebox_sidecar(&app, args, &models_root)?,
+            run_localai_sidecar(&app, args, &models_root)?,
         )
     } else {
         let voice_style_id = sanitize_voice_style_id(
@@ -392,9 +392,9 @@ fn generate_tts_preview_blocking(
         let preset_voice = sanitize_qwen_preset_voice_id(
             request.qwen_preset_voice_id.as_deref().unwrap_or("default"),
         )?;
-        let models_root = app_data.join("models").join("voicebox");
+        let models_root = app_data.join("models").join("localai");
         fs::create_dir_all(models_root.join("hf"))
-            .map_err(|error| format!("voicebox_model_dir_create_failed:{error}"))?;
+            .map_err(|error| format!("localai_model_dir_create_failed:{error}"))?;
         let args = qwen_tts_read_args(
             text,
             &output_path,
@@ -403,7 +403,7 @@ fn generate_tts_preview_blocking(
             &language,
             &models_root,
         );
-        let output = run_voicebox_sidecar(&app, args, &models_root)?;
+        let output = run_localai_sidecar(&app, args, &models_root)?;
         ensure_tts_process_success("tts_preview_generate_failed", output)?;
         preset_voice
     } else {
@@ -688,7 +688,7 @@ fn run_supertonic_sidecar(
     })
 }
 
-fn run_voicebox_sidecar(
+fn run_localai_sidecar(
     app: &AppHandle,
     args: Vec<String>,
     models_root: &Path,
@@ -696,14 +696,14 @@ fn run_voicebox_sidecar(
     tauri::async_runtime::block_on(async {
         let output = app
             .shell()
-            .sidecar(VOICEBOX_EXTERNAL_BIN_PATH)
-            .map_err(|error| format!("voicebox_sidecar_unavailable:{error}"))?
+            .sidecar(LOCALAI_EXTERNAL_BIN_PATH)
+            .map_err(|error| format!("localai_sidecar_unavailable:{error}"))?
             .args(args)
             .env("HF_HOME", models_root.join("hf"))
             .env("HF_HUB_CACHE", models_root.join("hf").join("hub"))
             .output()
             .await
-            .map_err(|error| format!("voicebox_sidecar_start_failed:{error}"))?;
+            .map_err(|error| format!("localai_sidecar_start_failed:{error}"))?;
         Ok(SupertonicProcessOutput {
             success: output.status.success(),
             stdout: output.stdout,
@@ -1505,12 +1505,12 @@ fn tts_model_downloaded(app_data: &Path, model_id: &str) -> bool {
                 || non_empty_dir(&models_root.join("cache"))
         }
         QWEN_TTS_06B_MODEL_ID => {
-            let models_root = app_data.join("models").join("voicebox");
+            let models_root = app_data.join("models").join("localai");
             hf_repo_cache_exists(&models_root, "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16")
                 || hf_repo_cache_exists(&models_root, "Qwen/Qwen3-TTS-12Hz-0.6B-Base")
         }
         QWEN_TTS_17B_MODEL_ID => {
-            let models_root = app_data.join("models").join("voicebox");
+            let models_root = app_data.join("models").join("localai");
             hf_repo_cache_exists(&models_root, "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16")
                 || hf_repo_cache_exists(&models_root, "Qwen/Qwen3-TTS-12Hz-1.7B-Base")
         }
@@ -1677,7 +1677,7 @@ mod tests {
             QWEN_TTS_06B_MODEL_ID,
             "default",
             "en",
-            Path::new("/tmp/openbrief/models/voicebox"),
+            Path::new("/tmp/openbrief/models/localai"),
         );
 
         assert_eq!(args[0], "read");
@@ -1693,7 +1693,7 @@ mod tests {
         assert!(args
             .windows(2)
             .any(|pair| pair[0] == "--cache-dir"
-                && pair[1] == "/tmp/openbrief/models/voicebox/cache"));
+                && pair[1] == "/tmp/openbrief/models/localai/cache"));
     }
 
     #[test]
@@ -1716,7 +1716,7 @@ mod tests {
         let supertonic_snapshot = app_data
             .join("models/supertonic/hf/hub/models--Supertone--supertonic-3/snapshots/revision");
         let qwen_snapshot = app_data.join(
-            "models/voicebox/hf/hub/models--Qwen--Qwen3-TTS-12Hz-0.6B-Base/snapshots/revision",
+            "models/localai/hf/hub/models--Qwen--Qwen3-TTS-12Hz-0.6B-Base/snapshots/revision",
         );
         fs::create_dir_all(&supertonic_snapshot).unwrap();
         fs::write(supertonic_snapshot.join("model.bin"), b"model").unwrap();

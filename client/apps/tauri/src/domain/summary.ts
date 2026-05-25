@@ -45,6 +45,9 @@ export type VideoSummaryTemplate = {
   systemPrompt: string;
 };
 
+export const summaryTimestampHrefPrefix = "#openbrief-timestamp-";
+const legacySummaryTimestampHrefPrefix = "openbrief://timestamp/";
+
 export const YOUTUBE_BLOG_SUMMARY_SYSTEM_PROMPT = [
   "You are an expert YouTube summarizer and editorial writer.",
   "Turn the provided transcript into a polished, blog-post-style Markdown article that lets the reader understand the video without watching it, while still making the original video easy to navigate.",
@@ -61,10 +64,11 @@ export const YOUTUBE_BLOG_SUMMARY_SYSTEM_PROMPT = [
   "Timestamp rules:",
   "- Use only timestamps present in the transcript or metadata.",
   "- Never invent a timestamp. Never use a timestamp later than LAST_AVAILABLE_TIMESTAMP.",
-  "- Format timestamps as Markdown links when VIDEO_URL is provided: [MM:SS](VIDEO_URL&t=SECONDS) or [HH:MM:SS](VIDEO_URL&t=SECONDS).",
-  "- If timestamp links cannot be built, use bracketed timestamps only: [MM:SS].",
-  "- Each major section must include one primary timestamp near its heading.",
-  "- Timestamp labels should point to the beginning of the relevant idea.",
+  "- Use OpenBrief timestamp links instead of external video links: [MM:SS](#openbrief-timestamp-SECONDS) or [HH:MM:SS](#openbrief-timestamp-SECONDS).",
+  "- Keep timestamp link text to the timestamp label only. Do not wrap full sentences or paragraphs in timestamp links.",
+  "- To link a paragraph, place a timestamp link at the beginning or end of the relevant sentence.",
+  "- Each major section must include one primary OpenBrief timestamp link near its heading.",
+  "- Timestamp targets should point to the beginning of the relevant idea.",
   "",
   "Image rules:",
   "- Use only provided thumbnails, images, frames, or slide URLs.",
@@ -80,7 +84,7 @@ export const YOUTUBE_BLOG_SUMMARY_SYSTEM_PROMPT = [
   "## Table of Contents",
   "| Section | Starts At | What You Will Learn |",
   "| --- | --- | --- |",
-  "| [Section title](#markdown-anchor) | [MM:SS](VIDEO_URL&t=SECONDS) | One concise phrase |",
+  "| [Section title](#markdown-anchor) | [MM:SS](#openbrief-timestamp-SECONDS) | One concise phrase |",
   "Include 4-8 rows using natural topic boundaries from the transcript.",
   "",
   "## Summary",
@@ -88,7 +92,7 @@ export const YOUTUBE_BLOG_SUMMARY_SYSTEM_PROMPT = [
   "",
   "## Key Sections",
   "For every major section, use this pattern:",
-  "### [Section Title] - [MM:SS](VIDEO_URL&t=SECONDS)",
+  "### [Section Title] - [MM:SS](#openbrief-timestamp-SECONDS)",
   "Optional image when a relevant provided image URL exists.",
   "Write 2-5 paragraphs explaining the section in blog-post prose.",
   "**Key points:**",
@@ -272,6 +276,8 @@ export function createSummaryPrompt({
           ]
         : []),
       createLengthModeInstruction(lengthMode),
+      "",
+      createSummaryTimestampLinkInstruction(),
     ].join("\n"),
     userPrompt: [
       `VIDEO_TITLE: ${video.title}`,
@@ -300,6 +306,78 @@ export function createSummaryPrompt({
   };
 }
 
+export function createSummaryTimestampHref(totalSeconds: number) {
+  return `${summaryTimestampHrefPrefix}${Math.max(0, Math.floor(totalSeconds))}`;
+}
+
+export function createClickableSummaryTimestampMarkdown(markdown: string) {
+  let insideCodeFence = false;
+
+  return markdown
+    .split("\n")
+    .map((line) => {
+      if (line.trimStart().startsWith("```")) {
+        insideCodeFence = !insideCodeFence;
+        return line;
+      }
+
+      if (insideCodeFence) return line;
+
+      return linkBareSummaryTimestamps(line);
+    })
+    .join("\n");
+}
+
+export function parseSummaryTimestampHref(href: unknown): number | undefined {
+  if (typeof href !== "string") return undefined;
+
+  const rawValue = href.startsWith(summaryTimestampHrefPrefix)
+    ? href.slice(summaryTimestampHrefPrefix.length)
+    : href.startsWith(legacySummaryTimestampHrefPrefix)
+      ? href.slice(legacySummaryTimestampHrefPrefix.length)
+      : undefined;
+  if (rawValue === undefined) return undefined;
+
+  const seconds = Number(rawValue);
+  return Number.isInteger(seconds) && seconds >= 0 ? seconds : undefined;
+}
+
+export function parseSummaryTimestampLabel(label: unknown): number | undefined {
+  if (typeof label !== "string") return undefined;
+  return parseSummaryTimestampText(label.trim());
+}
+
+function linkBareSummaryTimestamps(line: string) {
+  return line.replace(
+    /(^|[\s|({])(\d{1,3}:\d{2}(?::\d{2})?)(?=\s*(?:$|[|)\]},.;!?]))/g,
+    (match, prefix: string, timestamp: string) => {
+      const seconds = parseSummaryTimestampText(timestamp);
+      return seconds === undefined
+        ? match
+        : `${prefix}[${timestamp}](${createSummaryTimestampHref(seconds)})`;
+    },
+  );
+}
+
+function parseSummaryTimestampText(timestamp: string) {
+  const parts = timestamp.split(":").map((part) => Number(part));
+  if (
+    parts.length < 2 ||
+    parts.length > 3 ||
+    parts.some((part) => !Number.isInteger(part) || part < 0)
+  ) {
+    return undefined;
+  }
+
+  const seconds = parts.at(-1);
+  const minutes = parts.at(-2);
+  const hours = parts.length === 3 ? parts[0] : 0;
+  if (seconds === undefined || minutes === undefined) return undefined;
+  if (seconds > 59 || (parts.length === 3 && minutes > 59)) return undefined;
+
+  return hours * 3600 + minutes * 60 + seconds;
+}
+
 export function createSummaryDocument({
   videoId,
   provider,
@@ -310,6 +388,7 @@ export function createSummaryDocument({
   sourceSegmentCount,
   sourceFileName,
   nowIso = new Date().toISOString(),
+  idSuffix = createSummaryIdSuffix(),
 }: {
   videoId: string;
   provider: ProviderKind;
@@ -320,8 +399,9 @@ export function createSummaryDocument({
   sourceSegmentCount: number;
   sourceFileName?: string;
   nowIso?: string;
+  idSuffix?: string;
 }): SummaryDocument {
-  const id = `summary-${videoId}-${sanitizeSummaryTimestamp(nowIso)}`;
+  const id = `summary-${videoId}-${sanitizeSummaryTimestamp(nowIso)}-${sanitizeSummaryTimestamp(idSuffix)}`;
 
   return {
     id,
@@ -344,6 +424,13 @@ function sanitizeSummaryTimestamp(nowIso: string) {
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "")
     || "now";
+}
+
+function createSummaryIdSuffix() {
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+  );
 }
 
 export function formatTranscriptSegment(segment: TranscriptSegment) {
@@ -397,4 +484,15 @@ function createLengthModeInstruction(lengthMode: SummaryLengthMode) {
         "Use balanced depth: enough detail to replace watching the video for most readers without becoming a transcript rewrite.",
       ].join("\n");
   }
+}
+
+function createSummaryTimestampLinkInstruction() {
+  return [
+    "OpenBrief timestamp link contract:",
+    `- Use the custom markdown timestamp node as a normal Markdown link whose linked text is the timestamp label: [MM:SS](${summaryTimestampHrefPrefix}SECONDS) or [HH:MM:SS](${summaryTimestampHrefPrefix}SECONDS).`,
+    "- SECONDS must be an integer from the transcript timestamp, not a formatted time string.",
+    "- Use it for section timestamp labels, paragraph leads, and high-signal moments that users may want to replay.",
+    "- Do not wrap prose in timestamp links; keep prose editable and keep only the timestamp label as the timestamp node.",
+    "- Do not use VIDEO_URL&t=SECONDS for in-app timestamp links.",
+  ].join("\n");
 }

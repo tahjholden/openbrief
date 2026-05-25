@@ -99,6 +99,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Install LLVM for macOS Intel native deps
         if: matrix.name == 'macos-intel'
@@ -117,34 +119,34 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
           cache: "pip"
-          cache-dependency-path: client/apps/tauri/src-tauri/sidecars/voicebox-python/pyproject.toml
+          cache-dependency-path: client/apps/tauri/src-tauri/sidecars/localai-python/pyproject.toml
 
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
           node-version: "22"
 
-      - name: Build Voicebox PyInstaller sidecar
+      - name: Build Local AI PyInstaller sidecar
         shell: bash
         run: |
           set -euo pipefail
-          node client/apps/tauri/scripts/build-voicebox-sidecar.js --release --profile "${{ matrix.profile }}"
+          node client/apps/tauri/scripts/build-localai-sidecar.js --release --profile "${{ matrix.profile }}"
           node --input-type=module <<'NODE' >> "$GITHUB_ENV"
           import { sidecarFileName, getHostTriple } from "./client/apps/tauri/scripts/setup-dev-sidecars.js";
           const targetTriple = getHostTriple();
-          const fileName = sidecarFileName("openbrief-voicebox", targetTriple);
-          console.log(`OPENBRIEF_VOICEBOX_TARGET=${targetTriple}`);
-          console.log(`OPENBRIEF_VOICEBOX_SIDECAR=client/apps/tauri/src-tauri/binaries/${fileName}`);
+          const fileName = sidecarFileName("openbrief-localai", targetTriple);
+          console.log(`OPENBRIEF_LOCALAI_TARGET=${targetTriple}`);
+          console.log(`OPENBRIEF_LOCALAI_SIDECAR=client/apps/tauri/src-tauri/binaries/${fileName}`);
           NODE
 
       - name: Verify sidecar command surface
         shell: bash
         run: |
           set -euo pipefail
-          test -s "$OPENBRIEF_VOICEBOX_SIDECAR"
-          "$OPENBRIEF_VOICEBOX_SIDECAR" runtime
-          "$OPENBRIEF_VOICEBOX_SIDECAR" models
-          "$OPENBRIEF_VOICEBOX_SIDECAR" read --help
+          test -s "$OPENBRIEF_LOCALAI_SIDECAR"
+          "$OPENBRIEF_LOCALAI_SIDECAR" runtime
+          "$OPENBRIEF_LOCALAI_SIDECAR" models
+          "$OPENBRIEF_LOCALAI_SIDECAR" read --help
 
       - name: Generate preset-voice smoke audio
         shell: bash
@@ -160,7 +162,7 @@ jobs:
           cache="smoke-output/cache"
           result="smoke-output/openbrief-qwen-tts-${{ matrix.name }}.json"
 
-          "$OPENBRIEF_VOICEBOX_SIDECAR" read \
+          "$OPENBRIEF_LOCALAI_SIDECAR" read \
             --model "$OPENBRIEF_QWEN_TTS_MODEL" \
             --language "$OPENBRIEF_QWEN_TTS_LANGUAGE" \
             --preset-voice default \
@@ -197,7 +199,7 @@ jobs:
               if frames <= 0:
                   raise SystemExit("wav has no frames")
 
-          print(json.dumps({"target": os.environ["OPENBRIEF_VOICEBOX_TARGET"], "wavBytes": audio_path.stat().st_size, "frames": frames}))
+          print(json.dumps({"target": os.environ["OPENBRIEF_LOCALAI_TARGET"], "wavBytes": audio_path.stat().st_size, "frames": frames}))
           PY
 
       - name: Upload smoke artifacts

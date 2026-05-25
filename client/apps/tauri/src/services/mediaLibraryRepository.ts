@@ -11,6 +11,7 @@ import type {
   PodcastDocument,
   PodcastGenerationJob,
 } from "@/domain/podcast";
+import type { QuizDocument, QuizGenerationJob } from "@/domain/quiz";
 import type { TranscriptVariant } from "@/domain/transcript-actions";
 import { invoke } from "@tauri-apps/api/core";
 import { canUseTauriRuntime, type TauriInvoke } from "@/services/tauriHelperClient";
@@ -27,6 +28,9 @@ export type MediaLibrarySnapshot = {
   podcastsByVideoId: Record<string, PodcastDocument>;
   podcastHistoryByVideoId: Record<string, PodcastDocument[]>;
   podcastJobsByVideoId: Record<string, PodcastGenerationJob>;
+  quizzesByVideoId: Record<string, QuizDocument>;
+  quizHistoryByVideoId: Record<string, QuizDocument[]>;
+  quizJobsByVideoId: Record<string, QuizGenerationJob>;
   playlists: VideoPlaylist[];
 };
 
@@ -63,6 +67,9 @@ export function createEmptyMediaLibrarySnapshot(): MediaLibrarySnapshot {
     podcastsByVideoId: {},
     podcastHistoryByVideoId: {},
     podcastJobsByVideoId: {},
+    quizzesByVideoId: {},
+    quizHistoryByVideoId: {},
+    quizJobsByVideoId: {},
     playlists: [],
   };
 }
@@ -259,6 +266,11 @@ function normalizeSnapshot(value: unknown): MediaLibrarySnapshot {
     value.podcastHistoryByVideoId,
     podcastsByVideoId,
   );
+  const quizzesByVideoId = getRecord<QuizDocument>(value.quizzesByVideoId);
+  const quizHistoryByVideoId = normalizeQuizHistory(
+    value.quizHistoryByVideoId,
+    quizzesByVideoId,
+  );
 
   return {
     videos: getArray<VideoAsset>(value.videos),
@@ -280,6 +292,9 @@ function normalizeSnapshot(value: unknown): MediaLibrarySnapshot {
     podcastJobsByVideoId: getRecord<PodcastGenerationJob>(
       value.podcastJobsByVideoId,
     ),
+    quizzesByVideoId,
+    quizHistoryByVideoId,
+    quizJobsByVideoId: getRecord<QuizGenerationJob>(value.quizJobsByVideoId),
     playlists: getArray<VideoPlaylist>(value.playlists),
   };
 }
@@ -341,6 +356,28 @@ function normalizePodcastHistory(
     Object.entries(history).map(([videoId, podcasts]) => [
       videoId,
       [...podcasts].sort(compareCreatedAtDesc),
+    ]),
+  );
+}
+
+function normalizeQuizHistory(
+  value: unknown,
+  latestQuizzes: Record<string, QuizDocument>,
+) {
+  const history = getArrayRecord<QuizDocument>(value);
+
+  for (const [videoId, latestQuiz] of Object.entries(latestQuizzes)) {
+    const quizzes = history[videoId] ?? [];
+
+    if (!quizzes.some((quiz) => quiz.id === latestQuiz.id)) {
+      history[videoId] = [...quizzes, latestQuiz];
+    }
+  }
+
+  return Object.fromEntries(
+    Object.entries(history).map(([videoId, quizzes]) => [
+      videoId,
+      [...quizzes].sort(compareCreatedAtDesc),
     ]),
   );
 }

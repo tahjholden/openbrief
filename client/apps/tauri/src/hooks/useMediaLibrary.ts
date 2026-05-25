@@ -29,6 +29,11 @@ import type {
   PodcastSpeakerConfig,
 } from "@/domain/podcast";
 import type {
+  QuizDocument,
+  QuizGenerationJob,
+  QuizMode,
+} from "@/domain/quiz";
+import type {
   SummaryLengthMode,
   VideoSummaryTemplateId,
 } from "@/domain/summary";
@@ -60,6 +65,7 @@ import {
   setVideoPlaylistCover,
 } from "@/domain/media-library";
 import { createPodcastDocument, createPodcastId } from "@/domain/podcast";
+import { normalizeQuestionCount } from "@/domain/quiz";
 import { createTranscriptJobId } from "@/domain/transcript";
 import { createTranscriptSourceVariant } from "@/domain/transcript-actions";
 import { FakeHelperClient } from "@/services/fakeHelperClient";
@@ -106,6 +112,9 @@ export type MediaLibraryState = {
   podcastsByVideoId: Record<string, PodcastDocument>;
   podcastHistoryByVideoId: Record<string, PodcastDocument[]>;
   podcastJobsByVideoId: Record<string, PodcastGenerationJob>;
+  quizzesByVideoId: Record<string, QuizDocument>;
+  quizHistoryByVideoId: Record<string, QuizDocument[]>;
+  quizJobsByVideoId: Record<string, QuizGenerationJob>;
   activeChatSessionIdsByVideoId: Record<string, string>;
   playlists: VideoPlaylist[];
 };
@@ -147,6 +156,9 @@ export function useMediaLibrary(
   >({});
   const [podcastJobsByVideoId, setPodcastJobsByVideoId] = useState<
     Record<string, PodcastGenerationJob>
+  >({});
+  const [quizJobsByVideoId, setQuizJobsByVideoId] = useState<
+    Record<string, QuizGenerationJob>
   >({});
   const [selectedVideoId, setSelectedVideoId] = useState<string | undefined>(
     initialVideos[0]?.id,
@@ -216,6 +228,15 @@ export function useMediaLibrary(
     : undefined;
   const selectedPodcastHistory = selectedVideoId
     ? (librarySnapshot.podcastHistoryByVideoId[selectedVideoId] ?? [])
+    : [];
+  const selectedQuizJob = selectedVideoId
+    ? quizJobsByVideoId[selectedVideoId]
+    : undefined;
+  const selectedQuiz = selectedVideoId
+    ? librarySnapshot.quizzesByVideoId[selectedVideoId]
+    : undefined;
+  const selectedQuizHistory = selectedVideoId
+    ? (librarySnapshot.quizHistoryByVideoId[selectedVideoId] ?? [])
     : [];
   const selectedChatMessages = selectedVideoId
     ? (librarySnapshot.chatMessagesByVideoId[selectedVideoId] ?? []).filter(
@@ -455,6 +476,18 @@ export function useMediaLibrary(
       model,
       streamingMode: options.streamingMode,
     });
+    const summarySnapshotHandler = options.streamingMode
+      ? createThrottledTextSnapshotHandler((draftText) => {
+          setSummaryJob(videoId, {
+            videoId,
+            status: "running",
+            provider,
+            model,
+            streamingMode: true,
+            draftText,
+          });
+        })
+      : undefined;
 
     try {
       const summary = await summaryChatService.generateSummary({
@@ -466,19 +499,9 @@ export function useMediaLibrary(
         lengthMode: options.lengthMode,
         outputLanguage: options.outputLanguage,
         streamingMode: options.streamingMode,
-        onTextSnapshot: options.streamingMode
-          ? (draftText) => {
-              setSummaryJob(videoId, {
-                videoId,
-                status: "running",
-                provider,
-                model,
-                streamingMode: true,
-                draftText,
-              });
-            }
-          : undefined,
+        onTextSnapshot: summarySnapshotHandler,
       });
+      summarySnapshotHandler?.cancel();
 
       updateLibrarySnapshot(
         (current) => ({
@@ -510,6 +533,8 @@ export function useMediaLibrary(
           error instanceof Error ? error.message : "summary_generation_failed",
       });
       throw error;
+    } finally {
+      summarySnapshotHandler?.cancel();
     }
   }
 
@@ -760,6 +785,85 @@ export function useMediaLibrary(
     }, true);
   }
 
+  async function generateQuiz({
+    videoId,
+    provider = "openai",
+    model,
+    mode,
+    questionCount,
+    areaOfInterest,
+    transcript,
+    summaryId,
+  }: {
+    videoId: string;
+    provider?: ProviderKind;
+    model?: string;
+    mode: QuizMode;
+    questionCount: number;
+    areaOfInterest: string;
+    transcript?: TranscriptSegment[];
+    summaryId?: string;
+  }) {
+    const video = findVideo(videoId);
+    const resolvedTranscript =
+      transcript ??
+      librarySnapshotRef.current.transcriptsByVideoId[videoId] ??
+      [];
+    const summary =
+      summaryById(librarySnapshotRef.current, videoId, summaryId) ??
+      latestSummaryForVideo(librarySnapshotRef.current, videoId);
+
+    setQuizJob(videoId, {
+      videoId,
+      status: "running",
+      provider,
+      model,
+    });
+
+    try {
+      const quiz = await summaryChatService.generateQuiz({
+        video,
+        transcript: resolvedTranscript,
+        summary,
+        mode,
+        questionCount: normalizeQuestionCount(questionCount),
+        areaOfInterest,
+        provider,
+        model,
+      });
+
+      updateLibrarySnapshot(
+        (current) => ({
+          ...current,
+          quizzesByVideoId: {
+            ...current.quizzesByVideoId,
+            [videoId]: quiz,
+          },
+          quizHistoryByVideoId: {
+            ...current.quizHistoryByVideoId,
+            [videoId]: upsertQuizDocument(
+              current.quizHistoryByVideoId[videoId] ?? [],
+              quiz,
+            ),
+          },
+        }),
+        true,
+      );
+      clearQuizJob(videoId);
+      return quiz;
+    } catch (error) {
+      setQuizJob(videoId, {
+        videoId,
+        status: "failed",
+        provider,
+        model,
+        errorMessage:
+          error instanceof Error ? error.message : "quiz_generation_failed",
+      });
+      throw error;
+    }
+  }
+
   function resetChatSession(videoId: string) {
     const nextSessionId = `session-${Date.now().toString(36)}-${Math.random()
       .toString(36)
@@ -935,12 +1039,18 @@ export function useMediaLibrary(
           current.podcastHistoryByVideoId,
           videoId,
         ),
+        quizzesByVideoId: omitRecordKey(current.quizzesByVideoId, videoId),
+        quizHistoryByVideoId: omitRecordKey(
+          current.quizHistoryByVideoId,
+          videoId,
+        ),
       }),
       true,
     );
     clearSummaryJob(videoId);
     clearChatJob(videoId);
     clearPodcastJob(videoId);
+    clearQuizJob(videoId);
     setSelectedVideoId((current) => {
       if (current !== videoId) return current;
 
@@ -1198,6 +1308,9 @@ export function useMediaLibrary(
       podcastsByVideoId: librarySnapshot.podcastsByVideoId,
       podcastHistoryByVideoId: librarySnapshot.podcastHistoryByVideoId,
       podcastJobsByVideoId,
+      quizzesByVideoId: librarySnapshot.quizzesByVideoId,
+      quizHistoryByVideoId: librarySnapshot.quizHistoryByVideoId,
+      quizJobsByVideoId,
       activeChatSessionIdsByVideoId,
       playlists: librarySnapshot.playlists,
     } satisfies MediaLibraryState,
@@ -1211,6 +1324,9 @@ export function useMediaLibrary(
     selectedPodcast,
     selectedPodcastHistory,
     selectedPodcastJob,
+    selectedQuiz,
+    selectedQuizHistory,
+    selectedQuizJob,
     selectedChatMessages,
     importLocalFile,
     importYoutubeUrl,
@@ -1220,6 +1336,7 @@ export function useMediaLibrary(
     sendChat,
     generatePodcast,
     deletePodcast,
+    generateQuiz,
     resetChatSession,
     updateChatMessageVoiceMessage,
     reviewTranscript,
@@ -1264,7 +1381,7 @@ export function useMediaLibrary(
     setSummaryJobsByVideoId((current) => omitRecordKey(current, videoId));
   }
 
-  function setChatJob(videoId: string, job: AiGenerationJob) {
+function setChatJob(videoId: string, job: AiGenerationJob) {
     setChatJobsByVideoId((current) => ({ ...current, [videoId]: job }));
   }
 
@@ -1278,6 +1395,14 @@ export function useMediaLibrary(
 
   function clearPodcastJob(videoId: string) {
     setPodcastJobsByVideoId((current) => omitRecordKey(current, videoId));
+  }
+
+  function setQuizJob(videoId: string, job: QuizGenerationJob) {
+    setQuizJobsByVideoId((current) => ({ ...current, [videoId]: job }));
+  }
+
+  function clearQuizJob(videoId: string) {
+    setQuizJobsByVideoId((current) => omitRecordKey(current, videoId));
   }
 }
 
@@ -1319,6 +1444,13 @@ function upsertPodcastDocument(
     podcast,
     ...podcasts.filter((candidate) => candidate.id !== podcast.id),
   ].sort(comparePodcastCreatedAtDesc);
+}
+
+function upsertQuizDocument(quizzes: QuizDocument[], quiz: QuizDocument) {
+  return [
+    quiz,
+    ...quizzes.filter((candidate) => candidate.id !== quiz.id),
+  ].sort(compareQuizCreatedAtDesc);
 }
 
 function summaryHistoryForVideo(
@@ -1367,6 +1499,12 @@ function comparePodcastCreatedAtDesc(
   left: PodcastDocument,
   right: PodcastDocument,
 ) {
+  return (
+    (Date.parse(right.createdAtIso) || 0) - (Date.parse(left.createdAtIso) || 0)
+  );
+}
+
+function compareQuizCreatedAtDesc(left: QuizDocument, right: QuizDocument) {
   return (
     (Date.parse(right.createdAtIso) || 0) - (Date.parse(left.createdAtIso) || 0)
   );
@@ -1499,6 +1637,61 @@ function transcriptProgressRange(command: HelperCommandName) {
     default:
       return { start: 1, end: 5 };
   }
+}
+
+function createThrottledTextSnapshotHandler(
+  onSnapshot: (draftText: string) => void,
+  intervalMs = 100,
+) {
+  let latestDraftText: string | undefined;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let lastEmittedAt: number | undefined;
+
+  function emit() {
+    if (latestDraftText === undefined) return;
+
+    onSnapshot(latestDraftText);
+    latestDraftText = undefined;
+    lastEmittedAt = performance.now();
+  }
+
+  function cancel() {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+      timeout = undefined;
+    }
+    latestDraftText = undefined;
+  }
+
+  const handler = (draftText: string) => {
+    latestDraftText = draftText;
+
+    if (lastEmittedAt === undefined) {
+      emit();
+      return;
+    }
+
+    const elapsedMs = performance.now() - lastEmittedAt;
+    if (elapsedMs >= intervalMs) {
+      if (timeout !== undefined) {
+        clearTimeout(timeout);
+        timeout = undefined;
+      }
+      emit();
+      return;
+    }
+
+    if (timeout === undefined) {
+      timeout = setTimeout(() => {
+        timeout = undefined;
+        emit();
+      }, intervalMs - elapsedMs);
+    }
+  };
+
+  handler.cancel = cancel;
+
+  return handler;
 }
 
 function shouldAttemptCaptionTranscript(video: VideoAsset) {
