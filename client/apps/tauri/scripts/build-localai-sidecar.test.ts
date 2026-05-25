@@ -194,6 +194,7 @@ describe("Local AI sidecar build script", () => {
         "mlx_lm",
         "mlx-lm",
         "sentencepiece",
+        "soynlp",
         "tokenizers",
         "transformers",
       ]),

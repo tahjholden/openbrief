@@ -58,12 +58,20 @@ describe("local STT model cards", () => {
       (language) => language.code,
     );
 
-    expect(codes).toContain("auto");
-    expect(codes).toContain("zh");
-    expect(codes).toContain("en");
-    expect(codes).toContain("yue");
-    expect(codes).toContain("ja");
-    expect(codes).toContain("es");
+    expect(codes).toEqual([
+      "auto",
+      "zh",
+      "en",
+      "yue",
+      "fr",
+      "de",
+      "it",
+      "ja",
+      "ko",
+      "pt",
+      "ru",
+      "es",
+    ]);
     expect(codes).not.toContain("fil");
     expect(codes).not.toContain("ar");
     expect(codes).not.toContain("vi");

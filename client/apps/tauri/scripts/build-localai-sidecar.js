@@ -259,6 +259,7 @@ export function pyinstallerCollectArgs({ profile, targetTriple }) {
     addCollectAll("mlx_audio");
     addCollectAll("mlx_lm");
     addCollectAll("sentencepiece");
+    addCollectAll("soynlp");
     addCollectAll("tokenizers");
     addCollectAll("transformers");
     addCopyMetadata("hf-xet");
@@ -268,6 +269,7 @@ export function pyinstallerCollectArgs({ profile, targetTriple }) {
     addCopyMetadata("mlx-lm");
     addCopyMetadata("safetensors");
     addCopyMetadata("sentencepiece");
+    addCopyMetadata("soynlp");
     addCopyMetadata("tokenizers");
     addCopyMetadata("transformers");
   }

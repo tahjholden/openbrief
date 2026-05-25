@@ -207,6 +207,7 @@ def runtime_info() -> dict[str, Any]:
             "qwen_asr": module_available("qwen_asr"),
             "mlx": module_available("mlx"),
             "mlx_audio": module_available("mlx_audio"),
+            "soynlp": module_available("soynlp"),
             "soundfile": module_available("soundfile"),
         },
     }
