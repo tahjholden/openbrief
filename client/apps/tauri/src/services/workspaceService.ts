@@ -5,11 +5,15 @@ import { invoke } from "@tauri-apps/api/core";
 
 export type WorkspaceDescriptor = {
   id: string;
+  uuid: string;
   name: string;
+  type: WorkspaceType;
   path: string;
   isDefault: boolean;
   active: boolean;
 };
+
+export type WorkspaceType = "local" | "synced";
 
 export type WorkspaceSnapshot = {
   activeWorkspaceId: string;
@@ -27,7 +31,9 @@ const defaultWorkspaceSnapshot: WorkspaceSnapshot = {
   workspaces: [
     {
       id: "default",
+      uuid: "00000000-0000-4000-8000-000000000000",
       name: "Default",
+      type: "local",
       path: "",
       isDefault: true,
       active: true,
@@ -89,7 +95,9 @@ export function createMockWorkspaceService(): WorkspaceService {
           })),
           {
             id,
+            uuid: uuidFromWorkspaceId(id),
             name,
+            type: "local",
             path: `workspace/${id}`,
             isDefault: false,
             active: true,
@@ -125,4 +133,14 @@ function workspaceIdFromName(name: string) {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "") || "workspace"
   );
+}
+
+function uuidFromWorkspaceId(workspaceId: string) {
+  let hash = 0x811c9dc5;
+  for (const character of workspaceId) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  const hex = Math.abs(hash).toString(16).padStart(8, "0").slice(0, 8);
+  return `${hex}-0000-4000-8000-${hex.padEnd(12, "0")}`;
 }

@@ -1,21 +1,36 @@
 use serde::{Deserialize, Serialize};
+use sha1::{Digest, Sha1};
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Manager, Runtime};
 
 const DEFAULT_WORKSPACE_ID: &str = "default";
+const DEFAULT_WORKSPACE_UUID: &str = "00000000-0000-4000-8000-000000000000";
 const WORKSPACE_DIR_NAME: &str = "workspace";
 const ACTIVE_WORKSPACE_FILE_NAME: &str = "active-workspace.json";
 const WORKSPACE_METADATA_FILE_NAME: &str = "workspace.json";
+static WORKSPACE_UUID_COUNTER: AtomicU64 = AtomicU64::new(1);
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum WorkspaceType {
+    Local,
+    // Reserved for future server-managed workspace metadata; local creation does not produce it yet.
+    Synced,
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceDescriptor {
     id: String,
+    uuid: String,
     name: String,
+    #[serde(rename = "type")]
+    workspace_type: WorkspaceType,
     path: String,
     is_default: bool,
     active: bool,
@@ -38,7 +53,10 @@ struct ActiveWorkspaceState {
 #[serde(rename_all = "camelCase")]
 struct WorkspaceMetadata {
     id: String,
+    uuid: Option<String>,
     name: String,
+    #[serde(rename = "type")]
+    workspace_type: Option<WorkspaceType>,
     created_at_unix_ms: u128,
 }
 
@@ -72,7 +90,9 @@ pub fn create_workspace<R: Runtime>(
         &workspace_root,
         &WorkspaceMetadata {
             id: workspace_id.clone(),
+            uuid: Some(create_workspace_uuid()),
             name: workspace_name,
+            workspace_type: Some(WorkspaceType::Local),
             created_at_unix_ms: now_unix_ms(),
         },
     )?;
@@ -153,7 +173,9 @@ fn workspace_snapshot_from_app_data(app_data_dir: &Path) -> Result<WorkspaceSnap
     let active_workspace_id = active_workspace_id(app_data_dir)?;
     let mut workspaces = vec![workspace_descriptor(
         DEFAULT_WORKSPACE_ID,
+        DEFAULT_WORKSPACE_UUID,
         "Default",
+        WorkspaceType::Local,
         app_data_dir,
         true,
         active_workspace_id == DEFAULT_WORKSPACE_ID,
@@ -175,12 +197,19 @@ fn workspace_snapshot_from_app_data(app_data_dir: &Path) -> Result<WorkspaceSnap
         }
         let metadata = read_workspace_metadata(&path).unwrap_or_else(|| WorkspaceMetadata {
             id: file_name.to_string(),
+            uuid: Some(stable_workspace_uuid(file_name)),
             name: humanize_workspace_id(file_name),
+            workspace_type: Some(WorkspaceType::Local),
             created_at_unix_ms: 0,
         });
+        let workspace_type = metadata.workspace_type.unwrap_or(WorkspaceType::Local);
+        let uuid = valid_workspace_uuid(metadata.uuid.as_deref())
+            .unwrap_or_else(|| stable_workspace_uuid(&metadata.id));
         workspaces.push(workspace_descriptor(
             &metadata.id,
+            &uuid,
             &metadata.name,
+            workspace_type,
             &path,
             false,
             active_workspace_id == metadata.id,
@@ -207,14 +236,18 @@ fn workspace_snapshot_from_app_data(app_data_dir: &Path) -> Result<WorkspaceSnap
 
 fn workspace_descriptor(
     id: &str,
+    uuid: &str,
     name: &str,
+    workspace_type: WorkspaceType,
     path: &Path,
     is_default: bool,
     active: bool,
 ) -> Result<WorkspaceDescriptor, String> {
     Ok(WorkspaceDescriptor {
         id: id.to_string(),
+        uuid: uuid.to_string(),
         name: name.to_string(),
+        workspace_type,
         path: path_to_string(canonicalize_existing_dir(path, "workspace_path_invalid")?),
         is_default,
         active,
@@ -368,6 +401,57 @@ fn humanize_workspace_id(workspace_id: &str) -> String {
         .join(" ")
 }
 
+fn create_workspace_uuid() -> String {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    let counter = WORKSPACE_UUID_COUNTER.fetch_add(1, Ordering::Relaxed);
+    uuid_from_seed(&format!("workspace-{unique}-{counter}"))
+}
+
+fn stable_workspace_uuid(workspace_id: &str) -> String {
+    uuid_from_seed(&format!("openbrief-workspace:{workspace_id}"))
+}
+
+fn uuid_from_seed(seed: &str) -> String {
+    let mut hasher = Sha1::new();
+    hasher.update(seed.as_bytes());
+    let mut hex = format!("{:x}", hasher.finalize());
+    hex.replace_range(12..13, "4");
+    hex.replace_range(16..17, "8");
+
+    format_uuid_hex(&hex[..32])
+}
+
+fn valid_workspace_uuid(value: Option<&str>) -> Option<String> {
+    let value = value?;
+    is_uuid_like(value).then(|| value.to_string())
+}
+
+fn is_uuid_like(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if bytes.len() != 36 {
+        return false;
+    }
+
+    bytes.iter().enumerate().all(|(index, byte)| {
+        matches!(index, 8 | 13 | 18 | 23) && *byte == b'-'
+            || !matches!(index, 8 | 13 | 18 | 23) && byte.is_ascii_hexdigit()
+    })
+}
+
+fn format_uuid_hex(hex: &str) -> String {
+    format!(
+        "{}-{}-{}-{}-{}",
+        &hex[0..8],
+        &hex[8..12],
+        &hex[12..16],
+        &hex[16..20],
+        &hex[20..32],
+    )
+}
+
 fn canonicalize_existing_dir(path: &Path, error_code: &str) -> Result<PathBuf, String> {
     path.canonicalize()
         .map_err(|error| format!("{error_code}:{error}"))
@@ -397,6 +481,8 @@ mod tests {
         assert_eq!(snapshot.active_workspace_id, "default");
         assert_eq!(snapshot.workspaces.len(), 1);
         assert_eq!(snapshot.workspaces[0].id, "default");
+        assert_eq!(snapshot.workspaces[0].uuid, DEFAULT_WORKSPACE_UUID);
+        assert_eq!(snapshot.workspaces[0].workspace_type, WorkspaceType::Local);
         assert_eq!(
             snapshot.workspaces[0].path,
             root.to_string_lossy().into_owned()
@@ -416,7 +502,9 @@ mod tests {
             &workspace_root,
             &WorkspaceMetadata {
                 id: workspace_id.clone(),
+                uuid: Some("4f1d6c5a-4a76-4f4d-8b63-2ff9e0ad9331".to_string()),
                 name: "Research Notes".to_string(),
+                workspace_type: Some(WorkspaceType::Local),
                 created_at_unix_ms: 1,
             },
         )
@@ -428,9 +516,71 @@ mod tests {
         assert_eq!(snapshot.active_workspace_id, workspace_id);
         assert!(snapshot.workspaces.iter().any(|workspace| {
             workspace.id == "research-notes"
+                && workspace.uuid == "4f1d6c5a-4a76-4f4d-8b63-2ff9e0ad9331"
+                && workspace.workspace_type == WorkspaceType::Local
                 && workspace.active
                 && workspace.path.ends_with("workspace/research-notes")
         }));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn legacy_workspace_metadata_defaults_to_local_with_stable_uuid() {
+        let root = create_temp_root("workspace-legacy");
+        let workspace_root = workspace_home_dir(&root).join("legacy-project");
+        fs::create_dir_all(workspace_root.join("library")).unwrap();
+        fs::write(
+            workspace_root.join(WORKSPACE_METADATA_FILE_NAME),
+            br#"{
+  "id": "legacy-project",
+  "name": "Legacy Project",
+  "createdAtUnixMs": 1
+}"#,
+        )
+        .unwrap();
+
+        let snapshot = workspace_snapshot_from_app_data(&root).unwrap();
+        let workspace = snapshot
+            .workspaces
+            .iter()
+            .find(|workspace| workspace.id == "legacy-project")
+            .unwrap();
+
+        assert_eq!(workspace.name, "Legacy Project");
+        assert_eq!(workspace.workspace_type, WorkspaceType::Local);
+        assert!(is_uuid_like(&workspace.uuid));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn synced_workspace_metadata_can_be_described_but_not_created_here() {
+        let root = create_temp_root("workspace-synced");
+        let workspace_root = workspace_home_dir(&root).join("server-project");
+        fs::create_dir_all(workspace_root.join("library")).unwrap();
+        write_workspace_metadata(
+            &workspace_root,
+            &WorkspaceMetadata {
+                id: "server-project".to_string(),
+                uuid: Some("c0a80101-2531-4b6d-8c2a-0f0f0f0f0f0f".to_string()),
+                name: "Server Project".to_string(),
+                workspace_type: Some(WorkspaceType::Synced),
+                created_at_unix_ms: 1,
+            },
+        )
+        .unwrap();
+
+        let snapshot = workspace_snapshot_from_app_data(&root).unwrap();
+        let workspace = snapshot
+            .workspaces
+            .iter()
+            .find(|workspace| workspace.id == "server-project")
+            .unwrap();
+
+        assert_eq!(workspace.name, "Server Project");
+        assert_eq!(workspace.workspace_type, WorkspaceType::Synced);
+        assert_eq!(workspace.uuid, "c0a80101-2531-4b6d-8c2a-0f0f0f0f0f0f");
 
         let _ = fs::remove_dir_all(root);
     }
