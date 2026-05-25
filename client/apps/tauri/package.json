@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "setup:dev-sidecars": "node scripts/build-helper-sidecar.js --debug && node scripts/build-fluidaudio-sidecar.js --debug && node scripts/build-supertonic-sidecar.js --debug && node scripts/build-localai-sidecar.js --debug",
+    "setup:dev-sidecars": "node scripts/build-helper-sidecar.js --debug && node scripts/build-fluidaudio-sidecar.js --debug && node scripts/build-supertonic-sidecar.js --debug && node scripts/build-localai-sidecar.js --debug && node scripts/sign-dev-media-tools.js",
     "build:sidecars": "node scripts/build-helper-sidecar.js --release && node scripts/build-fluidaudio-sidecar.js --release && node scripts/build-supertonic-sidecar.js --release && node scripts/build-localai-sidecar.js --release",
     "prepare:media-assets": "node scripts/prepare-media-assets.js",
     "update:yt-dlp": "node scripts/prepare-media-assets.js",

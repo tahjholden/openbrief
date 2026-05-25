@@ -1,9 +1,9 @@
-import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { createWriteStream } from "node:fs";
+import { createHash } from "node:crypto";
 import {
   chmodSync,
   copyFileSync,
+  createWriteStream,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -11,14 +11,25 @@ import {
   writeFileSync,
 } from "node:fs";
 import { get } from "node:https";
-import { dirname, join } from "node:path";
 import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { getHostTriple, SUPPORTED_HELPER_TARGET_TRIPLES } from "./setup-dev-sidecars.js";
+
+import {
+  getHostTriple,
+  SUPPORTED_HELPER_TARGET_TRIPLES,
+} from "./setup-dev-sidecars.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const require = createRequire(import.meta.url);
+const PYINSTALLER_ENTITLEMENTS_PATH = join(
+  __dirname,
+  "..",
+  "src-tauri",
+  "entitlements",
+  "macos-pyinstaller-sidecars.plist",
+);
 
 export const YTDLP_VERSION = "2026.03.17";
 export const YTDLP_RELEASE_BASE = `https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}`;
@@ -67,18 +78,19 @@ export function resolvePackageJsonPath(packageName) {
   try {
     return require.resolve(`${packageName}/package.json`);
   } catch (error) {
-    const installerRoot =
-      packageName.startsWith("@ffmpeg-installer/")
-        ? "@ffmpeg-installer/ffmpeg"
-        : packageName.startsWith("@ffprobe-installer/")
-          ? "@ffprobe-installer/ffprobe"
-          : null;
+    const installerRoot = packageName.startsWith("@ffmpeg-installer/")
+      ? "@ffmpeg-installer/ffmpeg"
+      : packageName.startsWith("@ffprobe-installer/")
+        ? "@ffprobe-installer/ffprobe"
+        : null;
 
     if (!installerRoot) {
       throw error;
     }
 
-    const installerPackageJsonPath = require.resolve(`${installerRoot}/package.json`);
+    const installerPackageJsonPath = require.resolve(
+      `${installerRoot}/package.json`,
+    );
     const nestedPackageJsonPath = join(
       dirname(dirname(installerPackageJsonPath)),
       packageName.split("/")[1],
@@ -127,7 +139,11 @@ export function describePreparedTool({
   };
 }
 
-export async function downloadFile(url, destinationPath, { httpsGet = get } = {}) {
+export async function downloadFile(
+  url,
+  destinationPath,
+  { httpsGet = get } = {},
+) {
   await new Promise((resolve, reject) => {
     const request = httpsGet(url, (response) => {
       if (
@@ -161,22 +177,35 @@ export async function downloadFile(url, destinationPath, { httpsGet = get } = {}
   });
 }
 
-export function copyPackagedBinary({ packageName, binaryName, destinationPath }) {
+export function copyPackagedBinary({
+  packageName,
+  binaryName,
+  destinationPath,
+}) {
   const sourcePath = packageBinaryPath(packageName, binaryName);
   if (!existsSync(sourcePath)) {
-    throw new Error(`media_tool_package_binary_missing:${packageName}/${binaryName}`);
+    throw new Error(
+      `media_tool_package_binary_missing:${packageName}/${binaryName}`,
+    );
   }
   copyFileSync(sourcePath, destinationPath);
 }
 
-export function adHocSignMacOSBinary(filePath, { spawn = spawnSync } = {}) {
+export function adHocSignMacOSBinary(
+  filePath,
+  { spawn = spawnSync, entitlementsPath = PYINSTALLER_ENTITLEMENTS_PATH } = {},
+) {
   if (process.platform !== "darwin") {
     return;
   }
 
-  const result = spawn("codesign", ["--force", "--sign", "-", filePath], {
-    encoding: "utf8",
-  });
+  const args = ["--force", "--sign", "-"];
+  if (entitlementsPath) {
+    args.push("--entitlements", entitlementsPath);
+  }
+  args.push(filePath);
+
+  const result = spawn("codesign", args, { encoding: "utf8" });
   if (result.status === 0) {
     return;
   }
@@ -185,7 +214,9 @@ export function adHocSignMacOSBinary(filePath, { spawn = spawnSync } = {}) {
     .filter(Boolean)
     .join("\n")
     .trim();
-  throw new Error(`macos_codesign_failed:${details || result.error?.message || "unknown"}`);
+  throw new Error(
+    `macos_codesign_failed:${details || result.error?.message || "unknown"}`,
+  );
 }
 
 export function readPackageMetadata(packageName) {
@@ -208,7 +239,10 @@ export async function prepareMediaAssets({
   mkdirSync(targetDir, { recursive: true });
 
   const ytdlpPath = join(targetDir, executableName("yt-dlp", targetTriple));
-  await download(`${YTDLP_RELEASE_BASE}/${targetSources.ytdlpAsset}`, ytdlpPath);
+  await download(
+    `${YTDLP_RELEASE_BASE}/${targetSources.ytdlpAsset}`,
+    ytdlpPath,
+  );
 
   const ffmpegPath = join(targetDir, executableName("ffmpeg", targetTriple));
   const ffprobePath = join(targetDir, executableName("ffprobe", targetTriple));
@@ -266,7 +300,10 @@ export async function prepareMediaAssets({
     ],
   };
 
-  writeFileSync(join(targetDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  writeFileSync(
+    join(targetDir, "manifest.json"),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  );
   return manifest;
 }
 
@@ -283,7 +320,10 @@ export function targetTripleFromArgs(args) {
   return getHostTriple();
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   const targetTriple = targetTripleFromArgs(process.argv.slice(2));
   if (!SUPPORTED_HELPER_TARGET_TRIPLES.includes(targetTriple)) {
     throw new Error(`Unsupported target triple: ${targetTriple}`);

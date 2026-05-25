@@ -1,13 +1,20 @@
-import { mkdtempSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+
 import {
   adHocSignMacOSBinary,
   describePreparedTool,
   executableName,
-  mediaToolTargetSources,
   mediaToolsDirForTarget,
+  mediaToolTargetSources,
   prepareMediaAssets,
   resolvePackageJsonPath,
   targetTripleFromArgs,
@@ -27,13 +34,15 @@ describe("media asset preparation", () => {
     expect(mediaToolTargetSources["x86_64-pc-windows-msvc"].ytdlpAsset).toBe(
       "yt-dlp.exe",
     );
-    expect(mediaToolTargetSources["aarch64-unknown-linux-gnu"].ffmpegPackage).toBe(
-      "@ffmpeg-installer/linux-arm64",
-    );
+    expect(
+      mediaToolTargetSources["aarch64-unknown-linux-gnu"].ffmpegPackage,
+    ).toBe("@ffmpeg-installer/linux-arm64");
   });
 
   it("uses Windows executable suffixes only for Windows targets", () => {
-    expect(executableName("ffprobe", "x86_64-pc-windows-msvc")).toBe("ffprobe.exe");
+    expect(executableName("ffprobe", "x86_64-pc-windows-msvc")).toBe(
+      "ffprobe.exe",
+    );
     expect(executableName("ffprobe", "aarch64-apple-darwin")).toBe("ffprobe");
   });
 
@@ -93,7 +102,8 @@ describe("media asset preparation", () => {
       expect(statSync(ytdlpPath).mode & 0o111).toBeGreaterThan(0);
     }
     expect(
-      JSON.parse(readFileSync(join(targetDir, "manifest.json"), "utf8")).targetTriple,
+      JSON.parse(readFileSync(join(targetDir, "manifest.json"), "utf8"))
+        .targetTriple,
     ).toBe(targetTriple);
   });
 
@@ -104,10 +114,11 @@ describe("media asset preparation", () => {
     expect(() => targetTripleFromArgs(["--target"])).toThrow(/requires/);
   });
 
-  it("ad-hoc signs macOS binaries with codesign", () => {
+  it("ad-hoc signs macOS PyInstaller binaries with library-validation entitlements", () => {
     const calls: unknown[] = [];
 
     adHocSignMacOSBinary("/tmp/yt-dlp", {
+      entitlementsPath: "/tmp/entitlements.plist",
       spawn: (command, args) => {
         calls.push([command, args]);
         return { status: 0 };
@@ -116,7 +127,17 @@ describe("media asset preparation", () => {
 
     if (process.platform === "darwin") {
       expect(calls).toEqual([
-        ["codesign", ["--force", "--sign", "-", "/tmp/yt-dlp"]],
+        [
+          "codesign",
+          [
+            "--force",
+            "--sign",
+            "-",
+            "--entitlements",
+            "/tmp/entitlements.plist",
+            "/tmp/yt-dlp",
+          ],
+        ],
       ]);
     } else {
       expect(calls).toEqual([]);

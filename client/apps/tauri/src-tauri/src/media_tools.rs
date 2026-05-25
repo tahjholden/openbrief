@@ -229,6 +229,7 @@ async fn update_yt_dlp_binary<R: Runtime>(app: &AppHandle<R>) -> Result<(), Stri
     drop(file);
 
     mark_executable(&partial)?;
+    sign_macos_ytdlp_if_needed(&partial)?;
     fs::rename(&partial, &destination).map_err(|error| format!("yt_dlp_rename_failed:{error}"))?;
 
     write_update_manifest(&destination_dir, &release.tag_name)?;
@@ -406,6 +407,42 @@ fn mark_executable(_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
+fn sign_macos_ytdlp_if_needed(path: &Path) -> Result<(), String> {
+    let output = Command::new("codesign")
+        .args(macos_ytdlp_codesign_args(path))
+        .output()
+        .map_err(|error| format!("yt_dlp_codesign_start_failed:{error}"))?;
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Err(format!(
+        "yt_dlp_codesign_failed:{}",
+        if detail.is_empty() {
+            "unknown"
+        } else {
+            &detail
+        }
+    ))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn sign_macos_ytdlp_if_needed(_path: &Path) -> Result<(), String> {
+    Ok(())
+}
+
+fn macos_ytdlp_codesign_args(path: &Path) -> Vec<String> {
+    vec![
+        "--force".to_string(),
+        "--sign".to_string(),
+        "-".to_string(),
+        path.to_string_lossy().into_owned(),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -431,6 +468,14 @@ mod tests {
             "yt-dlp_linux_aarch64"
         );
         assert_eq!(ytdlp_asset_name("x86_64-unknown-linux-gnu"), "yt-dlp_linux");
+    }
+
+    #[test]
+    fn shapes_macos_ytdlp_ad_hoc_codesign_args() {
+        assert_eq!(
+            macos_ytdlp_codesign_args(Path::new("/tmp/yt-dlp")),
+            vec!["--force", "--sign", "-", "/tmp/yt-dlp"]
+        );
     }
 
     #[test]
