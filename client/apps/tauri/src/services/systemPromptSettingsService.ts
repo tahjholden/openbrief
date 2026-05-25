@@ -1,10 +1,15 @@
 import { DEFAULT_CHAT_SYSTEM_PROMPT } from "@/domain/chat";
-import { YOUTUBE_BLOG_SUMMARY_SYSTEM_PROMPT } from "@/domain/summary";
 import { DEFAULT_QUIZ_SYSTEM_PROMPT } from "@/domain/quiz";
+import { YOUTUBE_BLOG_SUMMARY_SYSTEM_PROMPT } from "@/domain/summary";
 import {
   DEFAULT_TRANSCRIPT_REVIEW_SYSTEM_PROMPT,
   DEFAULT_TRANSCRIPT_TRANSLATION_SYSTEM_PROMPT,
 } from "@/domain/transcript-actions";
+import {
+  getWorkspaceStorageItem,
+  removeWorkspaceStorageItem,
+  setWorkspaceStorageItem,
+} from "@/services/workspaceStorage";
 
 export type SystemPromptSettings = {
   videoSummary: string;
@@ -30,7 +35,9 @@ export function loadSystemPromptSettings(
   if (!storage) return defaultSystemPromptSettings;
 
   try {
-    return normalizeSystemPromptSettings(JSON.parse(storage.getItem(storageKey) ?? "{}"));
+    return normalizeSystemPromptSettings(
+      JSON.parse(getWorkspaceStorageItem(storageKey, storage) ?? "{}"),
+    );
   } catch {
     return defaultSystemPromptSettings;
   }
@@ -41,14 +48,14 @@ export function saveSystemPromptSettings(
   storage: Storage | undefined = browserStorage(),
 ): SystemPromptSettings {
   const normalized = normalizeSystemPromptSettings(settings);
-  storage?.setItem(storageKey, JSON.stringify(normalized));
+  setWorkspaceStorageItem(storageKey, JSON.stringify(normalized), storage);
   return normalized;
 }
 
 export function resetSystemPromptSettings(
   storage: Storage | undefined = browserStorage(),
 ): SystemPromptSettings {
-  storage?.removeItem(storageKey);
+  removeWorkspaceStorageItem(storageKey, storage);
   return defaultSystemPromptSettings;
 }
 
@@ -57,11 +64,14 @@ function normalizeSystemPromptSettings(value: unknown): SystemPromptSettings {
     return defaultSystemPromptSettings;
   }
 
-  const candidate = value as Partial<Record<keyof SystemPromptSettings, unknown>>;
+  const candidate = value as Partial<
+    Record<keyof SystemPromptSettings, unknown>
+  >;
 
   return {
     videoSummary:
-      typeof candidate.videoSummary === "string" && candidate.videoSummary.trim()
+      typeof candidate.videoSummary === "string" &&
+      candidate.videoSummary.trim()
         ? candidate.videoSummary
         : defaultSystemPromptSettings.videoSummary,
     chat:

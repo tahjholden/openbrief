@@ -1,3 +1,5 @@
+import type { TranslationKey, TranslationMessages } from "@/i18n/locales/en_us";
+import type { ReactNode } from "react";
 import {
   createContext,
   useCallback,
@@ -5,12 +7,11 @@ import {
   useEffect,
   useMemo,
   useState,
-  type ReactNode,
 } from "react";
 import { ar_ma } from "@/i18n/locales/ar_ma";
 import { de_de } from "@/i18n/locales/de_de";
 import { el_gr } from "@/i18n/locales/el_gr";
-import { en_us, type TranslationKey, type TranslationMessages } from "@/i18n/locales/en_us";
+import { en_us } from "@/i18n/locales/en_us";
 import { es_es } from "@/i18n/locales/es_es";
 import { fr_fr } from "@/i18n/locales/fr_fr";
 import { it_it } from "@/i18n/locales/it_it";
@@ -22,6 +23,10 @@ import { ru_ru } from "@/i18n/locales/ru_ru";
 import { uk_ua } from "@/i18n/locales/uk_ua";
 import { zh_cn } from "@/i18n/locales/zh_cn";
 import { zh_tw } from "@/i18n/locales/zh_tw";
+import {
+  getWorkspaceStorageItem,
+  setWorkspaceStorageItem,
+} from "@/services/workspaceStorage";
 
 export type { TranslationKey } from "@/i18n/locales/en_us";
 
@@ -96,7 +101,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const setLanguageSelection = useCallback((selection: LanguageSelection) => {
     setLanguageSelectionState(selection);
     try {
-      window.localStorage.setItem(storageKey, selection);
+      setWorkspaceStorageItem(storageKey, selection);
     } catch {
       // Keep the in-memory language if localStorage is unavailable.
     }
@@ -139,7 +144,9 @@ export function hasLocaleTranslation(locale: LocaleCode, key: TranslationKey) {
   return Object.prototype.hasOwnProperty.call(localeModules[locale], key);
 }
 
-export function resolveLanguageSelection(selection: LanguageSelection): LocaleCode {
+export function resolveLanguageSelection(
+  selection: LanguageSelection,
+): LocaleCode {
   if (selection !== "auto") return selection;
 
   const languageTags =
@@ -155,7 +162,9 @@ export function resolveLanguageSelection(selection: LanguageSelection): LocaleCo
   return "en-US";
 }
 
-export function normalizeLocale(languageTag: string | undefined): LocaleCode | undefined {
+export function normalizeLocale(
+  languageTag: string | undefined,
+): LocaleCode | undefined {
   if (!languageTag) return undefined;
 
   const normalized = languageTag.replace("_", "-").toLowerCase();
@@ -166,7 +175,9 @@ export function normalizeLocale(languageTag: string | undefined): LocaleCode | u
   if (exactMatch) return exactMatch;
 
   const language = normalized.split("-")[0];
-  return supportedLocales.find((locale) => locale.toLowerCase().startsWith(`${language}-`));
+  return supportedLocales.find((locale) =>
+    locale.toLowerCase().startsWith(`${language}-`),
+  );
 }
 
 export function createLocaleOptions(): LocaleOption[] {
@@ -174,7 +185,10 @@ export function createLocaleOptions(): LocaleOption[] {
     {
       selection: "auto",
       locale: resolveLanguageSelection("auto"),
-      nativeName: translate(resolveLanguageSelection("auto"), "i18n.autoDetect"),
+      nativeName: translate(
+        resolveLanguageSelection("auto"),
+        "i18n.autoDetect",
+      ),
     },
     ...supportedLocales.map((locale) => ({
       selection: locale,
@@ -196,7 +210,7 @@ function createFallbackI18nContext(): I18nContextValue {
 
 function readStoredLanguageSelection(): LanguageSelection {
   try {
-    const stored = window.localStorage.getItem(storageKey);
+    const stored = getWorkspaceStorageItem(storageKey);
     if (stored === "auto" || supportedLocales.includes(stored as LocaleCode)) {
       return stored as LanguageSelection;
     }

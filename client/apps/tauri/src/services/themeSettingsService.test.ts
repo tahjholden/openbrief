@@ -5,6 +5,7 @@ import {
   saveAppColorSeed,
   saveAppTheme,
 } from "@/services/themeSettingsService";
+import { writeActiveWorkspaceId } from "@/services/workspaceStorage";
 import { beforeEach, describe, expect, it } from "vitest";
 
 describe("theme settings service", () => {
@@ -70,5 +71,26 @@ describe("theme settings service", () => {
     localStorage.setItem("openbrief.color-seed", "neon");
 
     expect(loadAppColorSeed()).toBe("green");
+  });
+
+  it("isolates saved appearance settings by workspace", () => {
+    saveAppTheme("dark");
+    saveAppColorSeed("blue");
+
+    writeActiveWorkspaceId("research");
+
+    expect(loadAppTheme()).toBe("light");
+    expect(loadAppColorSeed()).toBe("green");
+
+    saveAppTheme("dark");
+    saveAppColorSeed("teal");
+
+    writeActiveWorkspaceId("default");
+    expect(loadAppTheme()).toBe("dark");
+    expect(loadAppColorSeed()).toBe("blue");
+
+    writeActiveWorkspaceId("research");
+    expect(loadAppTheme()).toBe("dark");
+    expect(loadAppColorSeed()).toBe("teal");
   });
 });

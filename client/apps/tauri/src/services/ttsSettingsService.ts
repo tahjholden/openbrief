@@ -1,6 +1,14 @@
-import type { Qwen3TtsLanguageCode, Supertonic3LanguageCode } from "@acme/model-card";
-import { isSynthesisLanguageSupportedByModel } from "@acme/model-card";
 import type { PodcastLengthMode, PodcastOutputMode } from "@/domain/podcast";
+import {
+  getWorkspaceStorageItem,
+  setWorkspaceStorageItem,
+} from "@/services/workspaceStorage";
+
+import type {
+  Qwen3TtsLanguageCode,
+  Supertonic3LanguageCode,
+} from "@acme/model-card";
+import { isSynthesisLanguageSupportedByModel } from "@acme/model-card";
 
 export type TtsEngine = "supertonic" | "qwen";
 export type TtsModelId =
@@ -90,7 +98,9 @@ export function loadTtsSettings(storage = browserLocalStorage()): TtsSettings {
   if (!storage) return defaultTtsSettings;
 
   try {
-    return normalizeTtsSettings(JSON.parse(storage.getItem(storageKey) ?? "{}"));
+    return normalizeTtsSettings(
+      JSON.parse(getWorkspaceStorageItem(storageKey, storage) ?? "{}"),
+    );
   } catch {
     return defaultTtsSettings;
   }
@@ -101,7 +111,7 @@ export function saveTtsSettings(
   storage = browserLocalStorage(),
 ): TtsSettings {
   const normalized = normalizeTtsSettings(settings);
-  storage?.setItem(storageKey, JSON.stringify(normalized));
+  setWorkspaceStorageItem(storageKey, JSON.stringify(normalized), storage);
   return normalized;
 }
 
@@ -112,7 +122,7 @@ export function loadPodcastTtsSettings(
 
   try {
     return normalizePodcastTtsSettings(
-      JSON.parse(storage.getItem(podcastStorageKey) ?? "{}"),
+      JSON.parse(getWorkspaceStorageItem(podcastStorageKey, storage) ?? "{}"),
     );
   } catch {
     return defaultPodcastTtsSettings;
@@ -124,7 +134,11 @@ export function savePodcastTtsSettings(
   storage = browserLocalStorage(),
 ): PodcastTtsSettings {
   const normalized = normalizePodcastTtsSettings(settings);
-  storage?.setItem(podcastStorageKey, JSON.stringify(normalized));
+  setWorkspaceStorageItem(
+    podcastStorageKey,
+    JSON.stringify(normalized),
+    storage,
+  );
   return normalized;
 }
 
@@ -147,9 +161,10 @@ function normalizeTtsSettings(value: unknown): TtsSettings {
     qwenPresetVoiceId: isQwenPresetVoiceId(candidate.qwenPresetVoiceId)
       ? candidate.qwenPresetVoiceId
       : defaultTtsSettings.qwenPresetVoiceId,
-    languageCode: modelWasValid && isTtsLanguageCode(modelId, candidate.languageCode)
-      ? candidate.languageCode
-      : defaultLanguageForModel(modelId),
+    languageCode:
+      modelWasValid && isTtsLanguageCode(modelId, candidate.languageCode)
+        ? candidate.languageCode
+        : defaultLanguageForModel(modelId),
     hasSelectedVoice:
       typeof candidate.hasSelectedVoice === "boolean"
         ? candidate.hasSelectedVoice
@@ -174,13 +189,20 @@ function normalizePodcastTtsSettings(value: unknown): PodcastTtsSettings {
       candidate.lengthMode === "long"
         ? candidate.lengthMode
         : defaultPodcastTtsSettings.lengthMode,
-    speakerAVoiceStyleId: isSupertonicVoiceStyleId(candidate.speakerAVoiceStyleId)
+    speakerAVoiceStyleId: isSupertonicVoiceStyleId(
+      candidate.speakerAVoiceStyleId,
+    )
       ? candidate.speakerAVoiceStyleId
       : defaultPodcastTtsSettings.speakerAVoiceStyleId,
-    speakerBVoiceStyleId: isSupertonicVoiceStyleId(candidate.speakerBVoiceStyleId)
+    speakerBVoiceStyleId: isSupertonicVoiceStyleId(
+      candidate.speakerBVoiceStyleId,
+    )
       ? candidate.speakerBVoiceStyleId
       : defaultPodcastTtsSettings.speakerBVoiceStyleId,
-    languageCode: isTtsLanguageCode("Supertone/supertonic-3", candidate.languageCode)
+    languageCode: isTtsLanguageCode(
+      "Supertone/supertonic-3",
+      candidate.languageCode,
+    )
       ? candidate.languageCode
       : defaultPodcastTtsSettings.languageCode,
   };

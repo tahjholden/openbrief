@@ -15,6 +15,7 @@ import {
   createWorkspaceService,
   reloadForWorkspaceChange,
 } from "@/services/workspaceService";
+import { readActiveWorkspaceId } from "@/services/workspaceStorage";
 import {
   Check,
   FolderPlus,
@@ -77,11 +78,20 @@ export function AppLayout({
 
   useEffect(() => {
     let cancelled = false;
+    const initialWorkspaceId = readActiveWorkspaceId();
 
     workspaceService
       .loadSnapshot()
       .then((snapshot) => {
         if (!cancelled) {
+          if (
+            snapshot.activeWorkspaceId !== initialWorkspaceId &&
+            readActiveWorkspaceId() === snapshot.activeWorkspaceId
+          ) {
+            reloadForWorkspaceChange();
+            return;
+          }
+
           setWorkspaceSnapshot(snapshot);
         }
       })

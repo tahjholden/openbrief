@@ -1,8 +1,10 @@
+import type { GenerationParams, ProviderOperation } from "@/domain/provider";
+import { defaultGenerationParamsByOperation } from "@/domain/provider";
 import {
-  defaultGenerationParamsByOperation,
-  type GenerationParams,
-  type ProviderOperation,
-} from "@/domain/provider";
+  getWorkspaceStorageItem,
+  removeWorkspaceStorageItem,
+  setWorkspaceStorageItem,
+} from "@/services/workspaceStorage";
 
 export type GenerationSettings = Record<
   ProviderOperation,
@@ -21,7 +23,9 @@ export function loadGenerationSettings(
   if (!storage) return defaultGenerationSettings;
 
   try {
-    return normalizeGenerationSettings(JSON.parse(storage.getItem(storageKey) ?? "{}"));
+    return normalizeGenerationSettings(
+      JSON.parse(getWorkspaceStorageItem(storageKey, storage) ?? "{}"),
+    );
   } catch {
     return defaultGenerationSettings;
   }
@@ -32,14 +36,14 @@ export function saveGenerationSettings(
   storage: Storage | undefined = browserStorage(),
 ): GenerationSettings {
   const normalized = normalizeGenerationSettings(settings);
-  storage?.setItem(storageKey, JSON.stringify(normalized));
+  setWorkspaceStorageItem(storageKey, JSON.stringify(normalized), storage);
   return normalized;
 }
 
 export function resetGenerationSettings(
   storage: Storage | undefined = browserStorage(),
 ): GenerationSettings {
-  storage?.removeItem(storageKey);
+  removeWorkspaceStorageItem(storageKey, storage);
   return defaultGenerationSettings;
 }
 
@@ -82,9 +86,11 @@ function normalizeGenerationParams(
   const candidate = value as Partial<Record<keyof GenerationParams, unknown>>;
 
   return {
-    temperature: numberInRange(candidate.temperature, 0, 2) ?? fallback.temperature,
+    temperature:
+      numberInRange(candidate.temperature, 0, 2) ?? fallback.temperature,
     topP: numberInRange(candidate.topP, 0, 1) ?? fallback.topP,
-    maxTokens: integerInRange(candidate.maxTokens, 1, 128000) ?? fallback.maxTokens,
+    maxTokens:
+      integerInRange(candidate.maxTokens, 1, 128000) ?? fallback.maxTokens,
   };
 }
 

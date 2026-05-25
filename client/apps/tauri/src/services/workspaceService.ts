@@ -1,5 +1,6 @@
 import type { TauriInvoke } from "@/services/tauriHelperClient";
 import { canUseTauriRuntime } from "@/services/tauriHelperClient";
+import { writeActiveWorkspaceId } from "@/services/workspaceStorage";
 import { invoke } from "@tauri-apps/api/core";
 
 export type WorkspaceDescriptor = {
@@ -42,19 +43,29 @@ export function createWorkspaceService(
   }
 
   return {
-    loadSnapshot() {
-      return invokeCommand<WorkspaceSnapshot>("workspace_snapshot");
+    async loadSnapshot() {
+      const snapshot =
+        await invokeCommand<WorkspaceSnapshot>("workspace_snapshot");
+      writeActiveWorkspaceId(snapshot.activeWorkspaceId);
+      return snapshot;
     },
-    createWorkspace(name) {
-      return invokeCommand<WorkspaceSnapshot>(
+    async createWorkspace(name) {
+      const snapshot = await invokeCommand<WorkspaceSnapshot>(
         "create_workspace",
         name === undefined ? {} : { name },
       );
+      writeActiveWorkspaceId(snapshot.activeWorkspaceId);
+      return snapshot;
     },
-    switchWorkspace(workspaceId) {
-      return invokeCommand<WorkspaceSnapshot>("switch_workspace", {
-        workspaceId,
-      });
+    async switchWorkspace(workspaceId) {
+      const snapshot = await invokeCommand<WorkspaceSnapshot>(
+        "switch_workspace",
+        {
+          workspaceId,
+        },
+      );
+      writeActiveWorkspaceId(snapshot.activeWorkspaceId);
+      return snapshot;
     },
   };
 }
@@ -64,6 +75,7 @@ export function createMockWorkspaceService(): WorkspaceService {
 
   return {
     async loadSnapshot() {
+      writeActiveWorkspaceId(snapshot.activeWorkspaceId);
       return snapshot;
     },
     async createWorkspace(name = "Workspace 2") {
@@ -84,6 +96,7 @@ export function createMockWorkspaceService(): WorkspaceService {
           },
         ],
       };
+      writeActiveWorkspaceId(snapshot.activeWorkspaceId);
       return snapshot;
     },
     async switchWorkspace(workspaceId) {
@@ -94,6 +107,7 @@ export function createMockWorkspaceService(): WorkspaceService {
           active: workspace.id === workspaceId,
         })),
       };
+      writeActiveWorkspaceId(snapshot.activeWorkspaceId);
       return snapshot;
     },
   };

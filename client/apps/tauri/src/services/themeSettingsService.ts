@@ -1,10 +1,14 @@
 import {
+  getWorkspaceStorageItem,
+  setWorkspaceStorageItem,
+} from "@/services/workspaceStorage";
+
+import type { ColorSeed, ColorSeedOption } from "@acme/ui/color-theme";
+import {
   applyColorSeedVariables,
   colorSeedOptions,
-  defaultColorSeed as sharedDefaultColorSeed,
   isColorSeed,
-  type ColorSeed,
-  type ColorSeedOption,
+  defaultColorSeed as sharedDefaultColorSeed,
 } from "@acme/ui/color-theme";
 
 export type AppTheme = "light" | "dark";
@@ -19,23 +23,26 @@ const defaultColorSeed: AppColorSeed = sharedDefaultColorSeed;
 export const appColorSeedOptions: AppColorSeedOption[] = colorSeedOptions;
 
 export function loadAppTheme(): AppTheme {
-  const storedTheme = readStorage()?.getItem(themeStorageKey);
+  const storedTheme = getWorkspaceStorageItem(themeStorageKey, readStorage());
   return isAppTheme(storedTheme) ? storedTheme : defaultTheme;
 }
 
 export function saveAppTheme(theme: AppTheme): AppTheme {
-  readStorage()?.setItem(themeStorageKey, theme);
+  setWorkspaceStorageItem(themeStorageKey, theme, readStorage());
   applyAppTheme(theme, loadAppColorSeed());
   return theme;
 }
 
 export function loadAppColorSeed(): AppColorSeed {
-  const storedColorSeed = readStorage()?.getItem(colorSeedStorageKey);
+  const storedColorSeed = getWorkspaceStorageItem(
+    colorSeedStorageKey,
+    readStorage(),
+  );
   return isAppColorSeed(storedColorSeed) ? storedColorSeed : defaultColorSeed;
 }
 
 export function saveAppColorSeed(colorSeed: AppColorSeed): AppColorSeed {
-  readStorage()?.setItem(colorSeedStorageKey, colorSeed);
+  setWorkspaceStorageItem(colorSeedStorageKey, colorSeed, readStorage());
   applyAppTheme(loadAppTheme(), colorSeed);
   return colorSeed;
 }

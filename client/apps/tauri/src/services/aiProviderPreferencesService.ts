@@ -4,6 +4,10 @@ import {
   providerModelOptions,
   providerOptions,
 } from "@/domain/provider";
+import {
+  getWorkspaceStorageItem,
+  setWorkspaceStorageItem,
+} from "@/services/workspaceStorage";
 
 export type AiWorkflowProviderConfig = {
   provider: ProviderKind;
@@ -38,7 +42,7 @@ export function loadAiProviderPreferences(
 
   try {
     return normalizeAiProviderPreferences(
-      JSON.parse(storage.getItem(storageKey) ?? "{}"),
+      JSON.parse(getWorkspaceStorageItem(storageKey, storage) ?? "{}"),
     );
   } catch {
     return defaultAiProviderPreferences;
@@ -50,21 +54,26 @@ export function saveAiProviderPreferences(
   storage = browserLocalStorage(),
 ): AiProviderPreferences {
   const normalized = normalizeAiProviderPreferences(preferences);
-  storage?.setItem(storageKey, JSON.stringify(normalized));
+  setWorkspaceStorageItem(storageKey, JSON.stringify(normalized), storage);
   return normalized;
 }
 
 function normalizeAiProviderPreferences(value: unknown): AiProviderPreferences {
   if (!value || typeof value !== "object") return defaultAiProviderPreferences;
 
-  const candidate = value as Partial<Record<keyof AiProviderPreferences, unknown>>;
+  const candidate = value as Partial<
+    Record<keyof AiProviderPreferences, unknown>
+  >;
 
   return {
     summary: normalizeWorkflowConfig(
       candidate.summary,
       defaultAiProviderPreferences.summary,
     ),
-    chat: normalizeWorkflowConfig(candidate.chat, defaultAiProviderPreferences.chat),
+    chat: normalizeWorkflowConfig(
+      candidate.chat,
+      defaultAiProviderPreferences.chat,
+    ),
   };
 }
 
@@ -74,7 +83,9 @@ function normalizeWorkflowConfig(
 ): AiWorkflowProviderConfig {
   if (!value || typeof value !== "object") return fallback;
 
-  const candidate = value as Partial<Record<keyof AiWorkflowProviderConfig, unknown>>;
+  const candidate = value as Partial<
+    Record<keyof AiWorkflowProviderConfig, unknown>
+  >;
   const provider = providerOptions.includes(candidate.provider as ProviderKind)
     ? (candidate.provider as ProviderKind)
     : fallback.provider;

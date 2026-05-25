@@ -93,6 +93,10 @@ import {
   providerLabelForWebUrl,
 } from "@/services/externalUrlService";
 import { revealExportedFile } from "@/services/fileRevealService";
+import {
+  readOnboardingComplete,
+  writeOnboardingComplete,
+} from "@/services/onboardingStatusService";
 import { createPlaylistCoverService } from "@/services/playlistCoverService";
 import {
   createPodcastDownloadFileName,
@@ -292,7 +296,6 @@ type ChatTtsGeneration = {
   messageId: string;
 };
 
-const onboardingStorageKey = "openbrief.onboarding-complete";
 const videoPlaybackMenuEvent = "openbrief://video-playback-command";
 
 function chatTtsVoiceName(
@@ -3465,22 +3468,6 @@ function findSegmentContextForTime<
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function readOnboardingComplete() {
-  try {
-    return window.localStorage.getItem(onboardingStorageKey) === "true";
-  } catch {
-    return false;
-  }
-}
-
-function writeOnboardingComplete(done: boolean) {
-  try {
-    window.localStorage.setItem(onboardingStorageKey, String(done));
-  } catch {
-    // Keep first-run state in memory if localStorage is unavailable.
-  }
 }
 
 function findActiveSummary(
