@@ -226,6 +226,41 @@ type AppNotice =
       };
     };
 
+type AppNoticeTranslator = (
+  key: TranslationKey,
+  values?: Record<string, string | number | undefined>,
+) => string;
+
+export function createCompletedImportNotice({
+  job,
+  t,
+  onOpenMedia,
+  onDismiss,
+}: {
+  job: IngestJob;
+  t: AppNoticeTranslator;
+  onOpenMedia(videoId: string): void;
+  onDismiss(): void;
+}): AppNotice {
+  const videoId = job.videoId;
+  const message = t("finder.job.completedToast", {
+    title: job.title ?? job.originalUri ?? job.sourceKind,
+  });
+
+  if (!videoId) return message;
+
+  return {
+    message,
+    action: {
+      label: t("notice.open"),
+      onClick: () => {
+        onOpenMedia(videoId);
+        onDismiss();
+      },
+    },
+  };
+}
+
 type VideoPlaybackMenuCommand = "play" | "pause";
 
 type CaptionLanguageDialogState = {
@@ -792,11 +827,11 @@ export function AppShell() {
 
     if (completedJob) {
       setAppNotice(
-        t("finder.job.completedToast", {
-          title:
-            completedJob.title ??
-            completedJob.originalUri ??
-            completedJob.sourceKind,
+        createCompletedImportNotice({
+          job: completedJob,
+          t,
+          onOpenMedia: openVideoDetail,
+          onDismiss: () => setAppNotice(undefined),
         }),
       );
     }
