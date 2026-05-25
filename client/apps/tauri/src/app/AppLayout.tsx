@@ -158,6 +158,7 @@ export function AppLayout({
     <div className="bg-background text-foreground min-h-screen">
       <aside className="border-border bg-card fixed inset-y-0 left-0 z-50 flex w-20 flex-col items-center border-r px-3 py-5">
         <ContextMenu>
+          {/* Workspace switching is intentionally hidden behind the logo while experimental. */}
           <ContextMenuTrigger asChild>
             <button
               type="button"
