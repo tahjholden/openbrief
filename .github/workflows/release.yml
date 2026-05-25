@@ -444,15 +444,16 @@ jobs:
             release_args+=(--draft)
           fi
 
-          if ! gh release view "$tag" >/dev/null 2>&1; then
+          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create "$tag" \
+              --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "$title" \
               --notes "$body" \
               "${release_args[@]}" \
-            || gh release view "$tag" >/dev/null
+            || gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null
           fi
-          gh release edit "$tag" --target "$GITHUB_SHA"
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA"
 
           artifact_list="$(mktemp)"
           find release-artifacts -type f \( \
@@ -470,7 +471,7 @@ jobs:
             exit 1
           fi
 
-          xargs -0 -I {} gh release upload "$tag" "{}" --clobber < "$artifact_list"
+          xargs -0 -I {} gh release upload "$tag" "{}" --repo "$GITHUB_REPOSITORY" --clobber < "$artifact_list"
 
   smoke-next-step:
     name: Smoke workflow handoff
