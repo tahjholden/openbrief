@@ -299,14 +299,30 @@ jobs:
               echo "Missing media tool: $tool_path" >&2
               exit 1
             fi
-            codesign \
-              --force \
-              --options runtime \
-              --timestamp \
-              --sign "$APPLE_SIGNING_IDENTITY" \
-              "$tool_path"
+            codesign_args=(
+              --force
+              --options runtime
+              --timestamp
+              --sign "$APPLE_SIGNING_IDENTITY"
+            )
+            if [[ "$tool" == "yt-dlp" ]]; then
+              entitlements_path="$RUNNER_TEMP/openbrief-ytdlp-entitlements.plist"
+              cat > "$entitlements_path" <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>com.apple.security.cs.disable-library-validation</key>
+            <true/>
+          </dict>
+          </plist>
+          EOF
+              codesign_args+=(--entitlements "$entitlements_path")
+            fi
+            codesign "${codesign_args[@]}" "$tool_path"
             codesign --verify --verbose=2 "$tool_path"
           done
+          "$media_tools_dir/yt-dlp" --version
 
       - name: Build Tauri app
         working-directory: client/apps/tauri
