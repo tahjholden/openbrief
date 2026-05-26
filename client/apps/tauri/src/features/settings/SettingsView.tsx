@@ -74,7 +74,9 @@ import {
 import { Badge } from "@acme/ui/badge";
 import { Button } from "@acme/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@acme/ui/card";
+import { Input } from "@acme/ui/input";
 import { Textarea } from "@acme/ui/textarea";
+import { cn } from "@acme/ui";
 
 type SettingsViewProps = {
   settings?: SettingsSnapshot;
@@ -1023,67 +1025,52 @@ export function SettingsView({
 
         {activeTab === "ai" ? (
           <SettingsPanel tabId="ai">
-            <div className="grid w-full grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-8">
-              <Card className="2xl:col-span-4">
-                <CardHeader>
-                  <CardTitle>{t("settings.providers.title")}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {settings ? (
-                    <>
-                      <DescriptionList
-                        rows={[
-                          [
-                            t("settings.providers.default"),
-                            settings.llm.defaultProvider,
-                          ],
-                          [
-                            t("settings.providers.auth"),
-                            t("settings.providers.authValue"),
-                          ],
-                        ]}
-                      />
-                      <div className="grid gap-3 lg:grid-cols-2">
-                        <ProviderPreferenceCard
-                          id="summary-provider-preference"
-                          title={t("settings.providers.summaryProvider")}
-                          config={aiProviderPreferences.summary}
-                          streamingLabel={t("workbench.summary.streaming")}
-                          streamingModeLabel={t(
-                            "workbench.summary.streamingMode",
-                          )}
-                          streamingOnLabel={t("workbench.summary.streamingOn")}
-                          streamingOffLabel={t(
-                            "workbench.summary.streamingOff",
-                          )}
-                          streamingDescription={t(
-                            "workbench.summary.streamingDescription",
-                          )}
-                          onChange={(config) =>
-                            updateAiProviderPreference("summary", config)
-                          }
-                        />
-                        <ProviderPreferenceCard
-                          id="chat-provider-preference"
-                          title={t("settings.providers.chatProvider")}
-                          config={aiProviderPreferences.chat}
-                          streamingLabel={t("workbench.chat.streaming")}
-                          streamingModeLabel={t("workbench.chat.streamingMode")}
-                          streamingOnLabel={t("workbench.chat.streamingOn")}
-                          streamingOffLabel={t("workbench.chat.streamingOff")}
-                          streamingDescription={t(
-                            "workbench.chat.streamingDescription",
-                          )}
-                          onChange={(config) =>
-                            updateAiProviderPreference("chat", config)
-                          }
-                        />
-                      </div>
-                      <div className="grid [grid-template-columns:repeat(auto-fit,minmax(14rem,1fr))] gap-2">
+            <div className="space-y-4">
+              {settings ? (
+                <>
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    <ProviderPreferenceCard
+                      id="summary-provider-preference"
+                      title={t("settings.providers.summaryProvider")}
+                      config={aiProviderPreferences.summary}
+                      streamingLabel={t("workbench.summary.streaming")}
+                      streamingModeLabel={t(
+                        "workbench.summary.streamingMode",
+                      )}
+                      streamingDescription={t(
+                        "workbench.summary.streamingDescription",
+                      )}
+                      onChange={(config) =>
+                        updateAiProviderPreference("summary", config)
+                      }
+                    />
+                    <ProviderPreferenceCard
+                      id="chat-provider-preference"
+                      title={t("settings.providers.chatProvider")}
+                      config={aiProviderPreferences.chat}
+                      streamingLabel={t("workbench.chat.streaming")}
+                      streamingModeLabel={t("workbench.chat.streamingMode")}
+                      streamingDescription={t(
+                        "workbench.chat.streamingDescription",
+                      )}
+                      onChange={(config) =>
+                        updateAiProviderPreference("chat", config)
+                      }
+                    />
+                  </div>
+
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">
+                        {t("settings.providers.accounts")}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(14rem,1fr))]">
                         {settings.llm.accounts.map((account) => (
                           <div
                             key={account.provider}
-                            className="border-border rounded-md border px-3 py-2 text-sm"
+                            className="border-border bg-background rounded-md border px-3 py-2 text-sm"
                           >
                             <div className="flex items-center justify-between gap-3">
                               <span className="flex min-w-0 items-center gap-2 font-medium">
@@ -1096,15 +1083,36 @@ export function SettingsView({
                                   {account.label}
                                 </span>
                               </span>
-                              <Badge>
+                              <span
+                                role="switch"
+                                aria-checked={account.configured}
+                                className={cn(
+                                  "inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium",
+                                  account.configured
+                                    ? "bg-primary/10 text-primary"
+                                    : "bg-muted text-muted-foreground",
+                                )}
+                              >
+                                <span
+                                  className={cn(
+                                    "h-2 w-2 rounded-full",
+                                    account.configured
+                                      ? "bg-primary"
+                                      : "bg-muted-foreground/40",
+                                  )}
+                                />
                                 {account.configured
                                   ? t("settings.providers.configured")
                                   : t("settings.providers.notConfigured")}
-                              </Badge>
+                              </span>
                             </div>
-                            <p className="text-muted-foreground mt-1 text-xs">
-                              {settings.llm.defaultModels[account.provider]} ·{" "}
-                              {account.authModes.includes("oauth-subscription")
+                            <p className="text-muted-foreground mt-1 min-h-[2rem] text-xs leading-relaxed">
+                              {account.provider === "openai-compatible"
+                                ? t("settings.providers.customModel")
+                                : settings.llm.defaultModels[account.provider]}{" · "}
+                              {account.authModes.includes(
+                                "oauth-subscription",
+                              )
                                 ? `${t("settings.providers.openAiAuth")} · ${t("settings.providers.oauthPlanned")}`
                                 : t("settings.providers.apiKeyOnly")}
                             </p>
@@ -1122,12 +1130,12 @@ export function SettingsView({
                           </div>
                         ))}
                       </div>
-                    </>
-                  ) : (
-                    <SettingsSectionLoading />
-                  )}
-                </CardContent>
-              </Card>
+                    </CardContent>
+                  </Card>
+                </>
+              ) : (
+                <SettingsSectionLoading />
+              )}
 
               <SystemPromptsSection
                 systemPromptSettings={systemPromptSettings}
@@ -1712,8 +1720,6 @@ function ProviderPreferenceCard({
   config,
   streamingLabel,
   streamingModeLabel,
-  streamingOnLabel,
-  streamingOffLabel,
   streamingDescription,
   onChange,
 }: {
@@ -1722,15 +1728,13 @@ function ProviderPreferenceCard({
   config: AiWorkflowProviderConfig;
   streamingLabel: string;
   streamingModeLabel: string;
-  streamingOnLabel: string;
-  streamingOffLabel: string;
   streamingDescription: string;
   onChange(config: AiWorkflowProviderConfig): void;
 }) {
   const { t } = useI18n();
 
   return (
-    <div className="border-border grid gap-3 rounded-md border p-3 text-sm">
+    <div className="border-border bg-card grid gap-3 rounded-md border p-3 text-sm">
       <div className="flex items-center gap-2 font-medium">
         <ProviderIcon provider={config.provider} size={18} decorative />
         <span>{title}</span>
@@ -1764,52 +1768,69 @@ function ProviderPreferenceCard({
         <span className="text-muted-foreground text-xs font-medium">
           {t("setup.provider.model")}
         </span>
-        <select
-          id={`${id}-model`}
-          aria-label={`${title} ${t("setup.provider.model")}`}
-          value={config.model}
-          className="border-input bg-background h-10 w-full rounded-md border px-3 text-sm"
-          onChange={(event) =>
-            onChange({
-              ...config,
-              model: event.target.value,
-            })
-          }
-        >
-          {providerModelOptions[config.provider].map((model) => (
-            <option key={model} value={model}>
-              {model}
-            </option>
-          ))}
-        </select>
+        {config.provider === "openai-compatible" ? (
+          <Input
+            id={`${id}-model`}
+            aria-label={`${title} ${t("setup.provider.model")}`}
+            value={config.model}
+            className="h-10 w-full"
+            onChange={(event) =>
+              onChange({
+                ...config,
+                model: event.target.value,
+              })
+            }
+          />
+        ) : (
+          <select
+            id={`${id}-model`}
+            aria-label={`${title} ${t("setup.provider.model")}`}
+            value={config.model}
+            className="border-input bg-background h-10 w-full rounded-md border px-3 text-sm"
+            onChange={(event) =>
+              onChange({
+                ...config,
+                model: event.target.value,
+              })
+            }
+          >
+            {providerModelOptions[config.provider].map((model) => (
+              <option key={model} value={model}>
+                {model}
+              </option>
+            ))}
+          </select>
+        )}
       </label>
       <div className="grid gap-1">
         <span className="text-muted-foreground text-xs font-medium">
           {streamingLabel}
         </span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={config.streamingMode}
-          aria-label={`${title} ${streamingModeLabel}`}
-          className={`flex items-center justify-between rounded-md border px-3 py-2 text-left transition-colors ${
-            config.streamingMode
-              ? "border-primary bg-primary/10 text-foreground"
-              : "border-border bg-background text-muted-foreground hover:bg-muted"
-          }`}
-          onClick={() =>
-            onChange({
-              ...config,
-              streamingMode: !config.streamingMode,
-            })
-          }
-        >
-          <span>{streamingModeLabel}</span>
-          <span className="text-xs">
-            {config.streamingMode ? streamingOnLabel : streamingOffLabel}
-          </span>
-        </button>
-        <p className="text-muted-foreground text-xs">{streamingDescription}</p>
+        <div className="flex items-center justify-between">
+          <span className="text-sm">{streamingModeLabel}</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={config.streamingMode}
+            aria-label={`${title} ${streamingModeLabel}`}
+            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors ${
+              config.streamingMode ? "bg-primary" : "bg-input"
+            }`}
+            onClick={() =>
+              onChange({
+                ...config,
+                streamingMode: !config.streamingMode,
+              })
+            }
+          >
+            <span
+              className={`inline-block h-4 w-4 rounded-full bg-background shadow-sm transition-transform ${
+                config.streamingMode ? "translate-x-4" : "translate-x-0.5"
+              }`}
+            />
+          </button>
+        </div>
+        <p className="text-muted-foreground min-h-[2.5rem] text-xs">{streamingDescription}</p>
       </div>
     </div>
   );
